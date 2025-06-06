@@ -34,8 +34,14 @@ const navItems = [
 ];
 
 function AppLayoutContent({ children, pathname }: { children: ReactNode; pathname: string }) {
-  const { state: sidebarState, isMobile } = useSidebar();
+  const { state: sidebarState, isMobile, setOpenMobile } = useSidebar();
   const collapsed = !isMobile && sidebarState === 'collapsed';
+
+  const handleMenuClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   return (
     <>
@@ -52,6 +58,7 @@ function AppLayoutContent({ children, pathname }: { children: ReactNode; pathnam
                     asChild
                     isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
                     tooltip={item.label}
+                    onClick={handleMenuClick}
                   >
                     <Link href={item.href}>
                       <item.icon className="h-5 w-5" />
@@ -68,7 +75,7 @@ function AppLayoutContent({ children, pathname }: { children: ReactNode; pathnam
         <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/80 px-6 backdrop-blur-sm md:hidden">
           <SidebarTrigger asChild>
             <Button variant="outline" size="icon" className="shrink-0">
-               <PanelLeft className="h-5 w-5" />
+               <PanelLeft className="h-5 w-5 text-primary" />
                <span className="sr-only">Toggle navigation menu</span>
             </Button>
           </SidebarTrigger>
@@ -95,3 +102,4 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     </AppDataProvider>
   );
 }
+

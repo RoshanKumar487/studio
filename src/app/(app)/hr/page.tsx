@@ -13,9 +13,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, FileText, Trash2, Eye, FileUp } from 'lucide-react';
+import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -225,7 +226,7 @@ export default function HrPage() {
                     </FormItem>
                   )} />
                   <FormItem>
-                    <FormLabel>Upload File</FormLabel>
+                    <FormLabel>Attach File (Optional)</FormLabel>
                     <FormControl>
                       <Input 
                         type="file" 
@@ -272,11 +273,11 @@ export default function HrPage() {
                         </TableCell>
                         <TableCell>{format(doc.uploadedAt, "PPP p")}</TableCell>
                         <TableCell className="text-right space-x-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleOpenPreviewDialog(doc)} aria-label="Preview document">
+                          <Button variant="ghost" size="icon" onClick={() => handleOpenPreviewDialog(doc)} aria-label="Preview document metadata">
                             <Eye className="h-4 w-4" />
                             <span className="sr-only">Preview</span>
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })} aria-label="Delete document">
+                          <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })} aria-label="Delete document record">
                             <Trash2 className="h-4 w-4 text-destructive" />
                             <span className="sr-only">Delete</span>
                           </Button>
@@ -297,27 +298,29 @@ export default function HrPage() {
       <Dialog open={isPreviewDocumentDialogOpen} onOpenChange={setIsPreviewDocumentDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="font-headline">Document: {documentToPreview?.name}</DialogTitle>
+            <DialogTitle className="font-headline">Document Record: {documentToPreview?.name}</DialogTitle>
           </DialogHeader>
           {documentToPreview && (
             <div className="space-y-3 py-4">
               <p><span className="font-semibold">Document Title:</span> {documentToPreview.name}</p>
               <p><span className="font-semibold">Description:</span> {documentToPreview.description || "N/A"}</p>
-              <p><span className="font-semibold">Uploaded At:</span> {format(documentToPreview.uploadedAt, "PPP p")}</p>
+              <p><span className="font-semibold">Record Added:</span> {format(documentToPreview.uploadedAt, "PPP p")}</p>
               {documentToPreview.fileName ? (
                 <>
-                  <p><span className="font-semibold">File Name:</span> {documentToPreview.fileName}</p>
+                  <p><span className="font-semibold">Attached File Name:</span> {documentToPreview.fileName}</p>
                   <p><span className="font-semibold">File Type:</span> {documentToPreview.fileType || "N/A"}</p>
                   <p><span className="font-semibold">File Size:</span> {formatFileSize(documentToPreview.fileSize)}</p>
                 </>
               ) : (
-                 <p className="text-muted-foreground">No file was attached to this document record.</p>
+                 <p className="text-muted-foreground italic">No file was attached to this document record.</p>
               )}
-               <Card className="mt-6 bg-muted/50 p-3">
-                <CardDescription className="text-xs">
-                    <strong>Note:</strong> Actual file content preview and download are not implemented in this demo application as it does not include backend file storage. This preview only shows the metadata associated with the document record.
-                </CardDescription>
-               </Card>
+              <Alert className="mt-6">
+                <InfoIcon className="h-5 w-5" />
+                <AlertTitle>Important Note</AlertTitle>
+                <AlertDescription className="text-xs">
+                  Actual file content preview and download are not implemented in this demo application, as it does not include backend file storage. This preview only shows the metadata associated with the document record.
+                </AlertDescription>
+              </Alert>
             </div>
           )}
           <DialogFooter>
