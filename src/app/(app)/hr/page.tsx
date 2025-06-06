@@ -227,11 +227,15 @@ export default function HrPage() {
                   <FormItem>
                     <FormLabel>Upload File</FormLabel>
                     <FormControl>
-                      <Input type="file" onChange={handleFileChange} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"/>
+                      <Input 
+                        type="file" 
+                        onChange={handleFileChange} 
+                        className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                      />
                     </FormControl>
                     {selectedFile && (
-                        <FormDescription>
-                            Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                        <FormDescription className="flex items-center gap-1 pt-1">
+                            <FileUp className="h-4 w-4 text-muted-foreground" /> Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
                         </FormDescription>
                     )}
                     <FormDescription>Actual file upload to a server is not implemented in this demo.</FormDescription>
@@ -264,15 +268,15 @@ export default function HrPage() {
                              <Badge variant="secondary" className="flex items-center gap-1 w-fit">
                                 <FileUp className="h-3 w-3"/> {doc.fileName}
                              </Badge>
-                          ) : 'No file'}
+                          ) : <span className="text-muted-foreground text-xs">No file attached</span>}
                         </TableCell>
                         <TableCell>{format(doc.uploadedAt, "PPP p")}</TableCell>
                         <TableCell className="text-right space-x-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleOpenPreviewDialog(doc)}>
+                          <Button variant="ghost" size="icon" onClick={() => handleOpenPreviewDialog(doc)} aria-label="Preview document">
                             <Eye className="h-4 w-4" />
                             <span className="sr-only">Preview</span>
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })}>
+                          <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })} aria-label="Delete document">
                             <Trash2 className="h-4 w-4 text-destructive" />
                             <span className="sr-only">Delete</span>
                           </Button>
@@ -300,14 +304,20 @@ export default function HrPage() {
               <p><span className="font-semibold">Document Title:</span> {documentToPreview.name}</p>
               <p><span className="font-semibold">Description:</span> {documentToPreview.description || "N/A"}</p>
               <p><span className="font-semibold">Uploaded At:</span> {format(documentToPreview.uploadedAt, "PPP p")}</p>
-              {documentToPreview.fileName && (
+              {documentToPreview.fileName ? (
                 <>
                   <p><span className="font-semibold">File Name:</span> {documentToPreview.fileName}</p>
                   <p><span className="font-semibold">File Type:</span> {documentToPreview.fileType || "N/A"}</p>
                   <p><span className="font-semibold">File Size:</span> {formatFileSize(documentToPreview.fileSize)}</p>
                 </>
+              ) : (
+                 <p className="text-muted-foreground">No file was attached to this document record.</p>
               )}
-               <p className="text-sm text-muted-foreground pt-4">Actual file content preview/download is not available in this demo (no actual file upload is implemented).</p>
+               <Card className="mt-6 bg-muted/50 p-3">
+                <CardDescription className="text-xs">
+                    <strong>Note:</strong> Actual file content preview and download are not implemented in this demo application as it does not include backend file storage. This preview only shows the metadata associated with the document record.
+                </CardDescription>
+               </Card>
             </div>
           )}
           <DialogFooter>
@@ -326,7 +336,7 @@ export default function HrPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setDocumentToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteDocument} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteDocument} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -334,3 +344,4 @@ export default function HrPage() {
     </div>
   );
 }
+
