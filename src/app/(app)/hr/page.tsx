@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,14 +13,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download } from 'lucide-react';
+import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import Image from 'next/image';
 
 const employeeSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters.").max(100),
@@ -44,7 +45,9 @@ export default function HrPage() {
   const [isPreviewDocumentDialogOpen, setIsPreviewDocumentDialogOpen] = useState(false);
   const [documentToPreview, setDocumentToPreview] = useState<EmployeeDocument | null>(null);
   const [documentToDelete, setDocumentToDelete] = useState<{ empId: string, docId: string, docName: string } | null>(null);
+  
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
 
   const employeeForm = useForm<EmployeeFormData>({
@@ -56,6 +59,15 @@ export default function HrPage() {
     resolver: zodResolver(documentSchema),
     defaultValues: { name: '', description: '' },
   });
+
+  // Clean up object URLs
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
 
   const onEmployeeSubmit: SubmitHandler<EmployeeFormData> = async (data) => {
     const newEmployee = await addEmployee(data);
@@ -80,6 +92,10 @@ export default function HrPage() {
       toast({ title: "Document Record Added", description: `Document '${data.name}' added for ${selectedEmployee.name}.` });
       documentForm.reset();
       setSelectedFile(null);
+      if (imagePreviewUrl) {
+        URL.revokeObjectURL(imagePreviewUrl);
+        setImagePreviewUrl(null);
+      }
       
       const updatedEmployee = await getEmployeeById(selectedEmployee.id);
       setSelectedEmployee(updatedEmployee || null);
@@ -92,6 +108,10 @@ export default function HrPage() {
         setSelectedEmployee(employee);
         documentForm.reset(); 
         setSelectedFile(null);
+        if (imagePreviewUrl) {
+          URL.revokeObjectURL(imagePreviewUrl);
+          setImagePreviewUrl(null);
+        }
         setIsDocumentDialogMainOpen(true);
     } else {
         toast({title: "Error", description: "Could not load employee data.", variant: "destructive"});
@@ -114,12 +134,32 @@ export default function HrPage() {
   };
   
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
+    }
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
       documentForm.setValue("name", file.name.split('.').slice(0, -1).join('.') || file.name); // Pre-fill name from filename
+      if (file.type.startsWith('image/')) {
+        setImagePreviewUrl(URL.createObjectURL(file));
+      }
     } else {
       setSelectedFile(null);
+    }
+  };
+
+  const handleDownloadSelectedFile = () => {
+    if (selectedFile) {
+      const url = URL.createObjectURL(selectedFile);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = selectedFile.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
   };
 
@@ -175,7 +215,7 @@ export default function HrPage() {
           <CardTitle className="font-headline">Employee List</CardTitle>
         </CardHeader>
         <CardContent>
-          {loadingEmployees && <p>Loading employees...</p>}
+          {loadingEmployees && <p className="text-muted-foreground text-center py-4">Loading employees...</p>}
           {!loadingEmployees && employees.length === 0 && (
             <p className="text-muted-foreground text-center py-4">No employees added yet.</p>
           )}
@@ -212,13 +252,17 @@ export default function HrPage() {
         setIsDocumentDialogMainOpen(isOpen);
         if (!isOpen) {
             setSelectedEmployee(null);
-            setSelectedFile(null); 
+            setSelectedFile(null);
+             if (imagePreviewUrl) {
+                URL.revokeObjectURL(imagePreviewUrl);
+                setImagePreviewUrl(null);
+            }
         }
       }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="font-headline">Manage Documents for {selectedEmployee?.name}</DialogTitle>
-            <CardDescription>Add new document records or view existing ones. Firestore is used for employee data.</CardDescription>
+            <CardDescription>Add new document records or view existing ones. Employee data is stored in Firestore. File metadata is stored, but actual file content upload to cloud storage is not implemented in this demo.</CardDescription>
           </DialogHeader>
           
           <Card>
@@ -241,7 +285,7 @@ export default function HrPage() {
                     </FormItem>
                   )} />
                   <FormItem>
-                    <FormLabel>Attach File (Metadata Only)</FormLabel>
+                    <FormLabel>Attach File</FormLabel>
                     <FormControl>
                       <Input 
                         type="file" 
@@ -251,12 +295,38 @@ export default function HrPage() {
                     </FormControl>
                     {selectedFile && (
                         <FormDescription className="flex items-center gap-1 pt-1">
-                            <FileUp className="h-4 w-4 text-muted-foreground" /> Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                            <FileUp className="h-4 w-4 text-muted-foreground" /> Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)}) - Type: {selectedFile.type}
                         </FormDescription>
                     )}
-                    <FormDescription>This demo stores file metadata only. Actual file upload to cloud storage is not implemented.</FormDescription>
                   </FormItem>
-                  <Button type="submit"><PlusCircle className="mr-2 h-4 w-4"/> Add Document Record</Button>
+
+                  {imagePreviewUrl && selectedFile && selectedFile.type.startsWith('image/') && (
+                    <div className="my-4 p-2 border rounded-md">
+                      <FormLabel className="text-sm">Image Preview:</FormLabel>
+                      <Image src={imagePreviewUrl} alt="Selected image preview" width={200} height={200} className="mt-2 rounded-md object-contain max-h-48 w-auto" />
+                    </div>
+                  )}
+                  {selectedFile && !selectedFile.type.startsWith('image/') && (
+                     <div className="my-4 p-3 border rounded-md bg-muted/50">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <FileWarning className="h-5 w-5 text-amber-500" />
+                            <span>No preview available for this file type ({selectedFile.type}).</span>
+                        </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <Button type="submit"><PlusCircle className="mr-2 h-4 w-4"/> Add Document Record</Button>
+                    {selectedFile && (
+                      <Button type="button" variant="outline" onClick={handleDownloadSelectedFile}>
+                        <Download className="mr-2 h-4 w-4" /> Download Selected File
+                      </Button>
+                    )}
+                  </div>
+                   <FormDescription className="text-xs">
+                        Adding a record stores metadata (name, description, file details) in Firestore.
+                        The "Download Selected File" button works only for the file currently chosen above and downloads it from your browser, not from cloud storage.
+                    </FormDescription>
                 </form>
               </Form>
             </CardContent>
@@ -292,10 +362,12 @@ export default function HrPage() {
                             <Eye className="h-4 w-4" />
                             <span className="sr-only">Preview</span>
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })} aria-label="Delete document record">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                            <span className="sr-only">Delete</span>
-                          </Button>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })} aria-label="Delete document record">
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                                <span className="sr-only">Delete</span>
+                            </Button>
+                          </AlertDialogTrigger>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -329,11 +401,14 @@ export default function HrPage() {
               ) : (
                  <p className="text-muted-foreground italic">No file was attached to this document record.</p>
               )}
-              <Alert className="mt-6">
-                <InfoIcon className="h-5 w-5" />
-                <AlertTitle>Important Note</AlertTitle>
-                <AlertDescription className="text-xs">
-                  Actual file content preview and download are not implemented in this demo application, as it does not include backend file storage. This preview only shows the metadata associated with the document record.
+              <Alert variant="default" className="mt-6 bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-700">
+                <InfoIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <AlertTitle className="text-blue-700 dark:text-blue-300">Important Note on File Handling</AlertTitle>
+                <AlertDescription className="text-xs text-blue-600 dark:text-blue-400">
+                  This application demo stores document metadata (like name and file details) in Firestore.
+                  Actual file content (the file itself) is not uploaded to or stored on any server or cloud storage.
+                  Therefore, direct preview or download of previously "uploaded" files from this dialog is not possible.
+                  The "Download Selected File" button in the "Add Document Record" form only works for the file currently selected in your browser before its metadata is saved.
                 </AlertDescription>
               </Alert>
             </div>
@@ -342,16 +417,15 @@ export default function HrPage() {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  {/* The span is necessary for TooltipTrigger asChild with a disabled button */}
                   <span tabIndex={0}> 
                     <Button variant="outline" disabled>
                       <Download className="mr-2 h-4 w-4" />
-                      Download File
+                      Download Stored File
                     </Button>
                   </span>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Actual file download is not implemented in this demo.</p>
+                  <p className="max-w-xs">Actual file download from storage is not implemented in this demo as original files are not stored.</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -366,11 +440,12 @@ export default function HrPage() {
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the document record for "{documentToDelete?.docName}".
+              The actual file, if stored elsewhere, will not be affected as this demo only manages metadata.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setDocumentToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteDocument} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">Delete</AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteDocument} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">Delete Record</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -378,3 +453,4 @@ export default function HrPage() {
     </div>
   );
 }
+
