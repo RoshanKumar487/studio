@@ -269,25 +269,36 @@ const SidebarTrigger = React.forwardRef<
   const { toggleSidebar } = useSidebar();
   const Comp = asChild ? Slot : Button;
 
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    onClick?.(event);
+    if (!event.defaultPrevented) {
+      toggleSidebar();
+    }
+  };
+
   if (asChild && React.isValidElement(children)) {
     return (
       <Slot
         ref={ref}
         onClick={(event: React.MouseEvent<HTMLElement>) => {
-          (children.props.onClick as React.MouseEventHandler<HTMLElement>)?.(event);
-          if (!event.isDefaultPrevented()) {
+           // Call the child's onClick if it exists
+          if (typeof children.props.onClick === 'function') {
+            children.props.onClick(event);
+          }
+          // Then, if not defaultPrevented, call toggleSidebar
+          if (!event.defaultPrevented) {
             toggleSidebar();
           }
         }}
         {...props} // Spread remaining props to Slot
       >
-        {React.cloneElement(children, { // Clone to potentially merge className or other props
-          className: cn(children.props.className, className),
-           // onClick handler is managed by Slot's onClick above
+        {React.cloneElement(children, {
+           className: cn(children.props.className, className),
         })}
       </Slot>
     );
   }
+
 
   return (
     <Button
@@ -296,10 +307,7 @@ const SidebarTrigger = React.forwardRef<
       variant="ghost"
       size="icon"
       className={cn("h-7 w-7", className)}
-      onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
-        onClick?.(event);
-        toggleSidebar();
-      }}
+      onClick={handleClick}
       {...props}
     >
       <PanelLeft />
@@ -432,7 +440,7 @@ const SidebarContent = React.forwardRef<
         "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
-      {...props} // Forward all props, Slot will handle asChild if it's there
+      {...props}
     >
       {children}
     </Comp>
@@ -560,13 +568,17 @@ const sidebarMenuButtonVariants = cva(
   }
 )
 
+type CombinedButtonLinkProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
+  React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+    asChild?: boolean;
+    isActive?: boolean;
+    tooltip?: string | React.ComponentProps<typeof TooltipContent>;
+  } & VariantProps<typeof sidebarMenuButtonVariants>;
+
+
 const SidebarMenuButton = React.forwardRef<
-  HTMLButtonElement,
-  React.ButtonHTMLAttributes<HTMLButtonElement> & {
-    asChild?: boolean
-    isActive?: boolean
-    tooltip?: string | React.ComponentProps<typeof TooltipContent>
-  } & VariantProps<typeof sidebarMenuButtonVariants>
+  HTMLElement, // General element type for ref due to polymorphism
+  CombinedButtonLinkProps
 >(
   (
     {
@@ -577,25 +589,36 @@ const SidebarMenuButton = React.forwardRef<
       tooltip,
       className,
       children,
+      onClick: providedOnClick,
       ...props
     },
     ref
   ) => {
-    const Comp = asChild ? Slot : "button"
-    const { isMobile, state } = useSidebar()
+    const Comp = asChild ? Slot : "button";
+    const { isMobile, state, setOpenMobile } = useSidebar();
+
+    const handleClick = (event: React.MouseEvent<HTMLElement>) => {
+      if (providedOnClick) {
+        (providedOnClick as React.MouseEventHandler<HTMLElement>)?.(event);
+      }
+      if (isMobile && !event.defaultPrevented) {
+        setOpenMobile(false);
+      }
+    };
 
     const button = (
       <Comp
-        ref={ref}
+        ref={ref as React.Ref<any>} // Use 'any' for ref with Slot or a more specific type if possible
         data-sidebar="menu-button"
         data-size={size}
         data-active={isActive}
         className={cn(sidebarMenuButtonVariants({ variant, size }), className)}
+        onClick={handleClick}
         {...props}
       >
         {children}
       </Comp>
-    )
+    );
 
     if (!tooltip) {
       return button
@@ -795,4 +818,3 @@ export {
   SidebarTrigger,
   useSidebar,
 }
-
