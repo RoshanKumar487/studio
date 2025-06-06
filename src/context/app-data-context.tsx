@@ -4,9 +4,6 @@
 import type { RevenueEntry, ExpenseEntry, Appointment, Employee, EmployeeDocument, TimesheetEntry, Invoice } from '@/lib/types';
 import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-// Firebase db import is removed for employee data, but might be used elsewhere (e.g. Genkit)
-// import { db } from '@/lib/firebase'; 
-// import { collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 interface AppDataContextType {
   revenueEntries: RevenueEntry[];
@@ -76,7 +73,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       try {
         const response = await fetch('/api/employees');
         if (!response.ok) {
-          throw new Error('Failed to fetch employees');
+          let errorMessage = 'Failed to fetch employees';
+          try {
+            const errorData = await response.json();
+            if (errorData && errorData.message) {
+              errorMessage += `: ${errorData.message} (Status: ${response.status})`;
+            } else {
+              errorMessage += ` (Status: ${response.status})`;
+            }
+          } catch (e) {
+            // Failed to parse JSON, stick with generic status
+            errorMessage += ` (Status: ${response.status})`;
+          }
+          throw new Error(errorMessage);
         }
         const data: Employee[] = await response.json();
         setEmployees(data.sort((a, b) => a.name.localeCompare(b.name)));
@@ -128,7 +137,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(employeeData),
       });
       if (!response.ok) {
-        throw new Error('Failed to add employee');
+        throw new Error(`Failed to add employee (Status: ${response.status})`);
       }
       const newEmployee: Employee = await response.json();
       setEmployees(prev => [...prev, newEmployee].sort((a, b) => a.name.localeCompare(b.name)));
@@ -142,37 +151,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
   
   const getEmployeeById = useCallback(async (employeeId: string): Promise<Employee | undefined> => {
-     // First, check local state for quicker access if already fetched
-    const localEmployee = employees.find(emp => emp.id === employeeId);
-    if (localEmployee) return localEmployee;
-
-    // If not in local state, fetch from API (might be redundant if all employees are always fetched initially)
-    setLoadingEmployees(true); // Might want a specific loading state for single employee
+    setLoadingEmployees(true); 
     try {
       const response = await fetch(`/api/employees/${employeeId}`);
       if (!response.ok) {
-        if (response.status === 404) return undefined; // Not found
-        throw new Error(`Failed to fetch employee ${employeeId}`);
+        if (response.status === 404) return undefined; 
+        throw new Error(`Failed to fetch employee ${employeeId} (Status: ${response.status})`);
       }
       const employee: Employee = await response.json();
-       // Optionally update local state if this fetch is common
-       // setEmployees(prev => prev.map(e => e.id === employee.id ? employee : e)); 
+      // Optionally update local state if this fetch is common
+      // setEmployees(prev => prev.map(e => e.id === employee.id ? employee : e)); 
       return employee;
     } catch (error) {
       console.error(`Error fetching employee ${employeeId} from API:`, error);
       return undefined;
     } finally {
-       setLoadingEmployees(false); // Reset general loading state
+       setLoadingEmployees(false); 
     }
-  }, [employees]);
+  }, []);
 
 
   const addEmployeeDocument = useCallback(async (employeeId: string, documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'>): Promise<Employee | null> => {
-    const currentEmployee = employees.find(emp => emp.id === employeeId);
-    if (!currentEmployee) {
-      console.error("Employee not found locally for adding document");
-      return null; // Or fetch employee first
-    }
+    const currentEmployeeFromState = employees.find(emp => emp.id === employeeId);
+    // If you always want to ensure you're updating the latest, you might fetch first,
+    // but for this operation, we assume the base employee data is reasonably current for adding a doc.
 
     const newDocument: EmployeeDocument = {
       ...documentData,
@@ -180,24 +182,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       uploadedAt: new Date()
     };
     
-    const updatedDocuments = [...currentEmployee.documents, newDocument].sort((a,b) => b.uploadedAt.getTime() - a.uploadedAt.getTime());
+    // Optimistically create the new documents array
+    const updatedDocuments = currentEmployeeFromState 
+        ? [...currentEmployeeFromState.documents, newDocument].sort((a,b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())
+        : [newDocument]; // Fallback if employee wasn't in local state (should be rare if list is loaded)
     
     setLoadingEmployees(true);
     try {
       const response = await fetch(`/api/employees/${employeeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documents: updatedDocuments }),
+        // Send only the necessary update, e.g., the new documents array or specific instructions to add a document
+        body: JSON.stringify({ documents: updatedDocuments }), 
       });
       if (!response.ok) {
-        throw new Error('Failed to add employee document');
+        throw new Error(`Failed to add employee document (Status: ${response.status})`);
       }
       const updatedEmployee: Employee = await response.json();
       setEmployees(prev => prev.map(emp => emp.id === employeeId ? updatedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
       return updatedEmployee;
     } catch (error) {
       console.error("Error adding employee document via API:", error);
-      // Optionally revert local state or handle error
       return null;
     } finally {
       setLoadingEmployees(false);
@@ -205,13 +210,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [employees]);
 
   const deleteEmployeeDocument = useCallback(async (employeeId: string, documentId: string): Promise<Employee | null> => {
-    const currentEmployee = employees.find(emp => emp.id === employeeId);
-    if (!currentEmployee) {
-      console.error("Employee not found locally for deleting document");
-      return null;
+    const currentEmployeeFromState = employees.find(emp => emp.id === employeeId);
+    if (!currentEmployeeFromState) {
+        console.error("Cannot delete document: employee not found in local state.");
+        return null;
     }
-
-    const updatedDocuments = currentEmployee.documents.filter(doc => doc.id !== documentId);
+    const updatedDocuments = currentEmployeeFromState.documents.filter(doc => doc.id !== documentId);
 
     setLoadingEmployees(true);
     try {
@@ -221,7 +225,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ documents: updatedDocuments }),
       });
       if (!response.ok) {
-        throw new Error('Failed to delete employee document');
+        throw new Error(`Failed to delete employee document (Status: ${response.status})`);
       }
       const updatedEmployee: Employee = await response.json();
       setEmployees(prev => prev.map(emp => emp.id === employeeId ? updatedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
@@ -331,3 +335,4 @@ export function useAppData() {
   }
   return context;
 }
+
