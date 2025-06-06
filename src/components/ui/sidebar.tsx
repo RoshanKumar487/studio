@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 import { Button, type ButtonProps } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent as SheetContentPrimitive } from "@/components/ui/sheet"
+import { Sheet, SheetContent as SheetContentPrimitive, SheetTitle } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -207,6 +207,7 @@ const Sidebar = React.forwardRef<
             }
             side={side}
           >
+            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
             <div className="flex h-full w-full flex-col">{children}</div>
           </SheetContentPrimitive>
         </Sheet>
@@ -268,26 +269,42 @@ const SidebarTrigger = React.forwardRef<
   const { toggleSidebar } = useSidebar();
   const Comp = asChild ? Slot : Button;
 
+  if (asChild && React.isValidElement(children)) {
+    return (
+      <Slot
+        ref={ref}
+        onClick={(event: React.MouseEvent<HTMLElement>) => {
+          (children.props.onClick as React.MouseEventHandler<HTMLElement>)?.(event);
+          if (!event.isDefaultPrevented()) {
+            toggleSidebar();
+          }
+        }}
+        {...props} // Spread remaining props to Slot
+      >
+        {React.cloneElement(children, { // Clone to potentially merge className or other props
+          className: cn(children.props.className, className),
+           // onClick handler is managed by Slot's onClick above
+        })}
+      </Slot>
+    );
+  }
+
   return (
-    <Comp
+    <Button
       ref={ref}
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn(asChild ? "" : "h-7 w-7", className)}
+      className={cn("h-7 w-7", className)}
       onClick={(event: React.MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         toggleSidebar();
       }}
       {...props}
     >
-      {asChild ? children : (
-        <>
-          <PanelLeft />
-          <span className="sr-only">Toggle Sidebar</span>
-        </>
-      )}
-    </Comp>
+      <PanelLeft />
+      <span className="sr-only">Toggle Sidebar</span>
+    </Button>
   );
 });
 SidebarTrigger.displayName = "SidebarTrigger"
@@ -415,7 +432,7 @@ const SidebarContent = React.forwardRef<
         "flex min-h-0 flex-1 flex-col gap-2 overflow-auto group-data-[collapsible=icon]:overflow-hidden",
         className
       )}
-      {...props}
+      {...props} // Forward all props, Slot will handle asChild if it's there
     >
       {children}
     </Comp>
@@ -778,3 +795,4 @@ export {
   SidebarTrigger,
   useSidebar,
 }
+
