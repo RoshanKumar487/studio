@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useForm, Controller, type SubmitHandler, useFieldArray } from 'react-hook-form';
+import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAppData } from '@/context/app-data-context';
@@ -13,8 +13,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, FileText, UploadCloud, Trash2 } from 'lucide-react';
+import { Users, PlusCircle, FileText, UploadCloud, Trash2, Eye } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 
@@ -25,17 +26,22 @@ const employeeSchema = z.object({
 type EmployeeFormData = z.infer<typeof employeeSchema>;
 
 const documentSchema = z.object({
-  name: z.string().min(2, "Document name is required.").max(100),
+  name: z.string().min(1, "Document name is required.").max(100),
   description: z.string().max(200).optional(),
 });
 type DocumentFormData = z.infer<typeof documentSchema>;
 
 export default function HrPage() {
-  const { employees, addEmployee, addEmployeeDocument, getEmployeeById } = useAppData();
+  const { employees, addEmployee, addEmployeeDocument, getEmployeeById, deleteEmployeeDocument } = useAppData();
   const { toast } = useToast();
   const [isEmployeeFormOpen, setIsEmployeeFormOpen] = useState(false);
-  const [isDocumentFormOpen, setIsDocumentFormOpen] = useState(false);
+  const [isDocumentDialogMainOpen, setIsDocumentDialogMainOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  
+  const [isPreviewDocumentDialogOpen, setIsPreviewDocumentDialogOpen] = useState(false);
+  const [documentToPreview, setDocumentToPreview] = useState<EmployeeDocument | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<{ empId: string, docId: string, docName: string } | null>(null);
+
 
   const employeeForm = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
@@ -57,17 +63,31 @@ export default function HrPage() {
   const onDocumentSubmit: SubmitHandler<DocumentFormData> = (data) => {
     if (selectedEmployee) {
       addEmployeeDocument(selectedEmployee.id, data);
-      toast({ title: "Document Added", description: `Document '${data.name}' added for ${selectedEmployee.name}.` });
+      toast({ title: "Document Record Added", description: `Document '${data.name}' added for ${selectedEmployee.name}.` });
       documentForm.reset();
-      setIsDocumentFormOpen(false);
+      // Note: We don't close the main document dialog here, user might want to add more.
       // Refresh selected employee to show new document
-      setSelectedEmployee(getEmployeeById(selectedEmployee.id)); 
+      setSelectedEmployee(prev => prev ? getEmployeeById(prev.id) : null); 
     }
   };
 
   const openDocumentDialog = (employee: Employee) => {
     setSelectedEmployee(employee);
-    setIsDocumentFormOpen(true);
+    setIsDocumentDialogMainOpen(true);
+  };
+
+  const handleOpenPreviewDialog = (doc: EmployeeDocument) => {
+    setDocumentToPreview(doc);
+    setIsPreviewDocumentDialogOpen(true);
+  };
+
+  const handleDeleteDocument = () => {
+    if (documentToDelete && selectedEmployee) {
+      deleteEmployeeDocument(documentToDelete.empId, documentToDelete.docId);
+      toast({ title: "Document Deleted", description: `Document '${documentToDelete.docName}' has been deleted.` });
+      setSelectedEmployee(prev => prev ? getEmployeeById(prev.id) : null);
+      setDocumentToDelete(null); // Close confirmation dialog
+    }
   };
   
   return (
@@ -119,7 +139,7 @@ export default function HrPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Documents</TableHead>
+                  <TableHead className="text-center">Documents</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -128,7 +148,7 @@ export default function HrPage() {
                   <TableRow key={employee.id}>
                     <TableCell className="font-medium">{employee.name}</TableCell>
                     <TableCell>{employee.email || 'N/A'}</TableCell>
-                    <TableCell>{employee.documents.length}</TableCell>
+                    <TableCell className="text-center">{employee.documents.length}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="outline" size="sm" onClick={() => openDocumentDialog(employee)}>
                         <FileText className="mr-2 h-4 w-4" /> Manage Documents
@@ -145,18 +165,18 @@ export default function HrPage() {
       </Card>
 
       {/* Dialog for Adding/Managing Documents for Selected Employee */}
-      <Dialog open={isDocumentFormOpen} onOpenChange={(isOpen) => {
-        setIsDocumentFormOpen(isOpen);
-        if (!isOpen) setSelectedEmployee(null); // Clear selected employee on close
+      <Dialog open={isDocumentDialogMainOpen} onOpenChange={(isOpen) => {
+        setIsDocumentDialogMainOpen(isOpen);
+        if (!isOpen) setSelectedEmployee(null); 
       }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="font-headline">Manage Documents for {selectedEmployee?.name}</DialogTitle>
-            <CardDescription>Upload and view documents for this employee.</CardDescription>
+            <CardDescription>Add new document records or view existing ones.</CardDescription>
           </DialogHeader>
           
           <Card>
-            <CardHeader><CardTitle className="text-lg font-semibold">Add New Document</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-lg font-semibold">Add New Document Record</CardTitle></CardHeader>
             <CardContent>
               <Form {...documentForm}>
                 <form onSubmit={documentForm.handleSubmit(onDocumentSubmit)} className="space-y-4">
@@ -174,18 +194,17 @@ export default function HrPage() {
                       <FormMessage />
                     </FormItem>
                   )} />
-                  {/* Simulate file input - actual upload needs backend */}
                   <FormItem>
                     <FormLabel>Upload File (Simulated)</FormLabel>
                     <FormControl>
                       <div className="flex items-center justify-center w-full">
-                        <label htmlFor="dropzone-file" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-muted/80">
+                        <label htmlFor="dropzone-file-simulated" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-muted/80">
                             <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                 <UploadCloud className="w-8 h-8 mb-2 text-muted-foreground" />
                                 <p className="mb-1 text-sm text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                                <p className="text-xs text-muted-foreground"> (Actual file upload not implemented)</p>
+                                <p className="text-xs text-muted-foreground">(Actual file upload not implemented)</p>
                             </div>
-                            <input id="dropzone-file" type="file" className="hidden" disabled />
+                            <input id="dropzone-file-simulated" type="file" className="hidden" disabled />
                         </label>
                       </div> 
                     </FormControl>
@@ -198,8 +217,8 @@ export default function HrPage() {
           </Card>
 
           {selectedEmployee && selectedEmployee.documents.length > 0 && (
-            <Card className="mt-4">
-              <CardHeader><CardTitle className="text-lg font-semibold">Uploaded Documents</CardTitle></CardHeader>
+            <Card className="mt-6">
+              <CardHeader><CardTitle className="text-lg font-semibold">Uploaded Document Records</CardTitle></CardHeader>
               <CardContent>
                 <Table>
                   <TableHeader>
@@ -207,14 +226,27 @@ export default function HrPage() {
                       <TableHead>Name</TableHead>
                       <TableHead>Description</TableHead>
                       <TableHead>Uploaded At</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {selectedEmployee.documents.map(doc => (
                       <TableRow key={doc.id}>
-                        <TableCell>{doc.name}</TableCell>
-                        <TableCell>{doc.description || 'N/A'}</TableCell>
+                        <TableCell className="font-medium">{doc.name}</TableCell>
+                        <TableCell className="truncate max-w-xs">{doc.description || 'N/A'}</TableCell>
                         <TableCell>{format(doc.uploadedAt, "PPP p")}</TableCell>
+                        <TableCell className="text-right space-x-1">
+                          <Button variant="ghost" size="icon" onClick={() => handleOpenPreviewDialog(doc)}>
+                            <Eye className="h-4 w-4" />
+                            <span className="sr-only">Preview</span>
+                          </Button>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                              <span className="sr-only">Delete</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -222,11 +254,48 @@ export default function HrPage() {
               </CardContent>
             </Card>
           )}
-           <DialogFooter>
+           <DialogFooter className="mt-4">
              <DialogClose asChild><Button type="button" variant="outline">Close</Button></DialogClose>
            </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Preview Document Dialog */}
+      <Dialog open={isPreviewDocumentDialogOpen} onOpenChange={setIsPreviewDocumentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-headline">Document: {documentToPreview?.name}</DialogTitle>
+          </DialogHeader>
+          {documentToPreview && (
+            <div className="space-y-3 py-4">
+              <p><span className="font-semibold">Name:</span> {documentToPreview.name}</p>
+              <p><span className="font-semibold">Description:</span> {documentToPreview.description || "N/A"}</p>
+              <p><span className="font-semibold">Uploaded At:</span> {format(documentToPreview.uploadedAt, "PPP p")}</p>
+               <p className="text-sm text-muted-foreground pt-4">Actual file content preview is not available in this demo.</p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setIsPreviewDocumentDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Document Confirmation Dialog */}
+      <AlertDialog open={!!documentToDelete} onOpenChange={(isOpen) => !isOpen && setDocumentToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the document record for "{documentToDelete?.docName}".
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDocumentToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteDocument} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }

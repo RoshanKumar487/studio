@@ -20,6 +20,7 @@ interface AppDataContextType {
   
   addEmployee: (employeeData: Omit<Employee, 'id' | 'documents'>) => Employee;
   addEmployeeDocument: (employeeId: string, documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'>) => void;
+  deleteEmployeeDocument: (employeeId: string, documentId: string) => void;
   getEmployeeById: (employeeId: string) => Employee | undefined;
 
   addTimesheetEntry: (entry: Omit<TimesheetEntry, 'id'>) => void;
@@ -111,7 +112,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setEmployees(prevEmployees => 
       prevEmployees.map(emp => 
         emp.id === employeeId 
-          ? { ...emp, documents: [...emp.documents, { ...documentData, id: uuidv4(), uploadedAt: new Date() }] }
+          ? { ...emp, documents: [...emp.documents, { ...documentData, id: uuidv4(), uploadedAt: new Date() }].sort((a,b) => b.uploadedAt.getTime() - a.uploadedAt.getTime()) }
+          : emp
+      )
+    );
+  }, []);
+
+  const deleteEmployeeDocument = useCallback((employeeId: string, documentId: string) => {
+    setEmployees(prevEmployees =>
+      prevEmployees.map(emp =>
+        emp.id === employeeId
+          ? { ...emp, documents: emp.documents.filter(doc => doc.id !== documentId) }
           : emp
       )
     );
@@ -184,6 +195,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addAppointment,
       addEmployee,
       addEmployeeDocument,
+      deleteEmployeeDocument,
       getEmployeeById,
       addTimesheetEntry,
       getTimesheetsByEmployee,
