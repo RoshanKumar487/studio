@@ -13,13 +13,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon } from 'lucide-react';
+import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const employeeSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters.").max(100),
@@ -34,7 +35,7 @@ const documentSchema = z.object({
 type DocumentFormData = z.infer<typeof documentSchema>;
 
 export default function HrPage() {
-  const { employees, addEmployee, addEmployeeDocument, getEmployeeById, deleteEmployeeDocument } = useAppData();
+  const { employees, addEmployee, addEmployeeDocument, getEmployeeById, deleteEmployeeDocument, loadingEmployees } = useAppData();
   const { toast } = useToast();
   const [isEmployeeFormOpen, setIsEmployeeFormOpen] = useState(false);
   const [isDocumentDialogMainOpen, setIsDocumentDialogMainOpen] = useState(false);
@@ -56,14 +57,18 @@ export default function HrPage() {
     defaultValues: { name: '', description: '' },
   });
 
-  const onEmployeeSubmit: SubmitHandler<EmployeeFormData> = (data) => {
-    addEmployee(data);
-    toast({ title: "Employee Added", description: `${data.name} has been added.` });
-    employeeForm.reset();
-    setIsEmployeeFormOpen(false);
+  const onEmployeeSubmit: SubmitHandler<EmployeeFormData> = async (data) => {
+    const newEmployee = await addEmployee(data);
+    if (newEmployee) {
+      toast({ title: "Employee Added", description: `${data.name} has been added.` });
+      employeeForm.reset();
+      setIsEmployeeFormOpen(false);
+    } else {
+      toast({ title: "Error", description: `Failed to add employee ${data.name}.`, variant: "destructive" });
+    }
   };
 
-  const onDocumentSubmit: SubmitHandler<DocumentFormData> = (data) => {
+  const onDocumentSubmit: SubmitHandler<DocumentFormData> = async (data) => {
     if (selectedEmployee) {
       const documentData: Partial<Omit<EmployeeDocument, 'id' | 'uploadedAt'>> = { ...data };
       if (selectedFile) {
@@ -71,20 +76,26 @@ export default function HrPage() {
         documentData.fileType = selectedFile.type;
         documentData.fileSize = selectedFile.size;
       }
-      addEmployeeDocument(selectedEmployee.id, documentData as Omit<EmployeeDocument, 'id' | 'uploadedAt'>);
+      await addEmployeeDocument(selectedEmployee.id, documentData as Omit<EmployeeDocument, 'id' | 'uploadedAt'>);
       toast({ title: "Document Record Added", description: `Document '${data.name}' added for ${selectedEmployee.name}.` });
       documentForm.reset();
       setSelectedFile(null);
-      // Refresh selected employee data to show new document
-      setSelectedEmployee(prev => prev ? getEmployeeById(prev.id) : null); 
+      
+      const updatedEmployee = await getEmployeeById(selectedEmployee.id);
+      setSelectedEmployee(updatedEmployee || null);
     }
   };
 
-  const openDocumentDialog = (employee: Employee) => {
-    setSelectedEmployee(employee);
-    documentForm.reset(); 
-    setSelectedFile(null);
-    setIsDocumentDialogMainOpen(true);
+  const openDocumentDialog = async (employeeId: string) => {
+    const employee = await getEmployeeById(employeeId);
+    if (employee) {
+        setSelectedEmployee(employee);
+        documentForm.reset(); 
+        setSelectedFile(null);
+        setIsDocumentDialogMainOpen(true);
+    } else {
+        toast({title: "Error", description: "Could not load employee data.", variant: "destructive"});
+    }
   };
 
   const handleOpenPreviewDialog = (doc: EmployeeDocument) => {
@@ -92,11 +103,12 @@ export default function HrPage() {
     setIsPreviewDocumentDialogOpen(true);
   };
 
-  const handleDeleteDocument = () => {
+  const handleDeleteDocument = async () => {
     if (documentToDelete && selectedEmployee) {
-      deleteEmployeeDocument(documentToDelete.empId, documentToDelete.docId);
+      await deleteEmployeeDocument(documentToDelete.empId, documentToDelete.docId);
       toast({ title: "Document Deleted", description: `Document '${documentToDelete.docName}' has been deleted.` });
-      setSelectedEmployee(prev => prev ? getEmployeeById(prev.id) : null);
+      const updatedEmployee = await getEmployeeById(selectedEmployee.id);
+      setSelectedEmployee(updatedEmployee || null);
       setDocumentToDelete(null); 
     }
   };
@@ -105,6 +117,7 @@ export default function HrPage() {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
+      documentForm.setValue("name", file.name.split('.').slice(0, -1).join('.') || file.name); // Pre-fill name from filename
     } else {
       setSelectedFile(null);
     }
@@ -162,7 +175,11 @@ export default function HrPage() {
           <CardTitle className="font-headline">Employee List</CardTitle>
         </CardHeader>
         <CardContent>
-          {employees.length > 0 ? (
+          {loadingEmployees && <p>Loading employees...</p>}
+          {!loadingEmployees && employees.length === 0 && (
+            <p className="text-muted-foreground text-center py-4">No employees added yet.</p>
+          )}
+          {!loadingEmployees && employees.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -179,7 +196,7 @@ export default function HrPage() {
                     <TableCell>{employee.email || 'N/A'}</TableCell>
                     <TableCell className="text-center">{employee.documents.length}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => openDocumentDialog(employee)}>
+                      <Button variant="outline" size="sm" onClick={() => openDocumentDialog(employee.id)}>
                         <FileText className="mr-2 h-4 w-4" /> Manage Documents
                       </Button>
                     </TableCell>
@@ -187,8 +204,6 @@ export default function HrPage() {
                 ))}
               </TableBody>
             </Table>
-          ) : (
-            <p className="text-muted-foreground text-center py-4">No employees added yet.</p>
           )}
         </CardContent>
       </Card>
@@ -203,7 +218,7 @@ export default function HrPage() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="font-headline">Manage Documents for {selectedEmployee?.name}</DialogTitle>
-            <CardDescription>Add new document records or view existing ones.</CardDescription>
+            <CardDescription>Add new document records or view existing ones. Firestore is used for employee data.</CardDescription>
           </DialogHeader>
           
           <Card>
@@ -226,7 +241,7 @@ export default function HrPage() {
                     </FormItem>
                   )} />
                   <FormItem>
-                    <FormLabel>Attach File (Optional)</FormLabel>
+                    <FormLabel>Attach File (Metadata Only)</FormLabel>
                     <FormControl>
                       <Input 
                         type="file" 
@@ -239,7 +254,7 @@ export default function HrPage() {
                             <FileUp className="h-4 w-4 text-muted-foreground" /> Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
                         </FormDescription>
                     )}
-                    <FormDescription>Actual file upload to a server is not implemented in this demo.</FormDescription>
+                    <FormDescription>This demo stores file metadata only. Actual file upload to cloud storage is not implemented.</FormDescription>
                   </FormItem>
                   <Button type="submit"><PlusCircle className="mr-2 h-4 w-4"/> Add Document Record</Button>
                 </form>
@@ -323,7 +338,23 @@ export default function HrPage() {
               </Alert>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="sm:justify-between items-center pt-4">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {/* The span is necessary for TooltipTrigger asChild with a disabled button */}
+                  <span tabIndex={0}> 
+                    <Button variant="outline" disabled>
+                      <Download className="mr-2 h-4 w-4" />
+                      Download File
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Actual file download is not implemented in this demo.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <Button onClick={() => setIsPreviewDocumentDialogOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
@@ -347,4 +378,3 @@ export default function HrPage() {
     </div>
   );
 }
-
