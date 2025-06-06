@@ -88,7 +88,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           throw new Error(errorMessage);
         }
         const data: Employee[] = await response.json();
-        setEmployees(data.sort((a, b) => a.name.localeCompare(b.name)));
+        // Ensure documents field is always an array after fetching
+        const employeesWithEnsuredDocuments = data.map(emp => ({
+            ...emp,
+            documents: Array.isArray(emp.documents) ? emp.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+        }));
+        setEmployees(employeesWithEnsuredDocuments.sort((a, b) => a.name.localeCompare(b.name)));
       } catch (error) {
         console.error("Error fetching employees from API:", error);
         // Handle error appropriately in UI, e.g. set an error state
@@ -137,11 +142,23 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(employeeData),
       });
       if (!response.ok) {
-        throw new Error(`Failed to add employee (Status: ${response.status})`);
+        let errorMessage = `Failed to add employee (Status: ${response.status})`;
+        try {
+          const errorData = await response.json();
+          if (errorData && errorData.message) {
+            errorMessage += `: ${errorData.message}`;
+          }
+        } catch (e) { /* Failed to parse JSON, stick with generic status */ }
+        throw new Error(errorMessage);
       }
       const newEmployee: Employee = await response.json();
-      setEmployees(prev => [...prev, newEmployee].sort((a, b) => a.name.localeCompare(b.name)));
-      return newEmployee;
+      // Ensure documents is an array and dates are Date objects
+      const processedEmployee = {
+        ...newEmployee,
+        documents: Array.isArray(newEmployee.documents) ? newEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+      };
+      setEmployees(prev => [...prev, processedEmployee].sort((a, b) => a.name.localeCompare(b.name)));
+      return processedEmployee;
     } catch (error) {
       console.error("Error adding employee via API:", error);
       return null;
@@ -156,12 +173,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`/api/employees/${employeeId}`);
       if (!response.ok) {
         if (response.status === 404) return undefined; 
-        throw new Error(`Failed to fetch employee ${employeeId} (Status: ${response.status})`);
+        let errorMessage = `Failed to fetch employee ${employeeId} (Status: ${response.status})`;
+         try {
+          const errorData = await response.json();
+          if (errorData && errorData.message) {
+            errorMessage += `: ${errorData.message}`;
+          }
+        } catch (e) { /* Failed to parse JSON */ }
+        throw new Error(errorMessage);
       }
       const employee: Employee = await response.json();
-      // Optionally update local state if this fetch is common
-      // setEmployees(prev => prev.map(e => e.id === employee.id ? employee : e)); 
-      return employee;
+      // Ensure documents field is always an array and dates are Date objects
+      const processedEmployee = {
+          ...employee,
+          documents: Array.isArray(employee.documents) ? employee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+      };
+      return processedEmployee;
     } catch (error) {
       console.error(`Error fetching employee ${employeeId} from API:`, error);
       return undefined;
@@ -172,71 +199,103 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
 
   const addEmployeeDocument = useCallback(async (employeeId: string, documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'>): Promise<Employee | null> => {
-    const currentEmployeeFromState = employees.find(emp => emp.id === employeeId);
-    // If you always want to ensure you're updating the latest, you might fetch first,
-    // but for this operation, we assume the base employee data is reasonably current for adding a doc.
-
-    const newDocument: EmployeeDocument = {
+    const newDocumentBase: Partial<EmployeeDocument> = {
       ...documentData,
       id: uuidv4(), 
-      uploadedAt: new Date()
+      uploadedAt: new Date() // Will be stringified in JSON, then rehydrated
     };
-    
-    // Optimistically create the new documents array
-    const updatedDocuments = currentEmployeeFromState 
-        ? [...currentEmployeeFromState.documents, newDocument].sort((a,b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())
-        : [newDocument]; // Fallback if employee wasn't in local state (should be rare if list is loaded)
     
     setLoadingEmployees(true);
     try {
+      // Fetch the current employee to ensure we have the latest documents array
+      const currentEmployeeResponse = await fetch(`/api/employees/${employeeId}`);
+      if (!currentEmployeeResponse.ok) {
+        let errorMessage = `Failed to fetch employee before adding document (Status: ${currentEmployeeResponse.status})`;
+        try { const errorData = await currentEmployeeResponse.json(); if (errorData && errorData.message) errorMessage += `: ${errorData.message}`; } catch (e) {}
+        throw new Error(errorMessage);
+      }
+      const currentEmployee: Employee = await currentEmployeeResponse.json();
+      const existingDocuments = Array.isArray(currentEmployee.documents) ? currentEmployee.documents : [];
+      
+      const updatedDocuments = [...existingDocuments, newDocumentBase as EmployeeDocument]
+                                .sort((a,b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+      
       const response = await fetch(`/api/employees/${employeeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        // Send only the necessary update, e.g., the new documents array or specific instructions to add a document
         body: JSON.stringify({ documents: updatedDocuments }), 
       });
+
       if (!response.ok) {
-        throw new Error(`Failed to add employee document (Status: ${response.status})`);
+        let errorMessage = `Failed to add employee document (Status: ${response.status})`;
+        try {
+          const errorData = await response.json();
+          if (errorData && errorData.message) {
+            errorMessage += `: ${errorData.message}`;
+          }
+        } catch (e) { /* Failed to parse JSON */ }
+        throw new Error(errorMessage);
       }
       const updatedEmployee: Employee = await response.json();
-      setEmployees(prev => prev.map(emp => emp.id === employeeId ? updatedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
-      return updatedEmployee;
+      // Ensure documents is an array and dates are Date objects
+      const processedEmployee = {
+        ...updatedEmployee,
+        documents: Array.isArray(updatedEmployee.documents) ? updatedEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+      };
+      setEmployees(prev => prev.map(emp => emp.id === employeeId ? processedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
+      return processedEmployee;
     } catch (error) {
       console.error("Error adding employee document via API:", error);
       return null;
     } finally {
       setLoadingEmployees(false);
     }
-  }, [employees]);
+  }, []);
 
   const deleteEmployeeDocument = useCallback(async (employeeId: string, documentId: string): Promise<Employee | null> => {
-    const currentEmployeeFromState = employees.find(emp => emp.id === employeeId);
-    if (!currentEmployeeFromState) {
-        console.error("Cannot delete document: employee not found in local state.");
-        return null;
-    }
-    const updatedDocuments = currentEmployeeFromState.documents.filter(doc => doc.id !== documentId);
-
     setLoadingEmployees(true);
     try {
+      // Fetch the current employee to ensure we have the latest documents array
+      const currentEmployeeResponse = await fetch(`/api/employees/${employeeId}`);
+      if (!currentEmployeeResponse.ok) {
+         let errorMessage = `Failed to fetch employee before deleting document (Status: ${currentEmployeeResponse.status})`;
+        try { const errorData = await currentEmployeeResponse.json(); if (errorData && errorData.message) errorMessage += `: ${errorData.message}`; } catch (e) {}
+        throw new Error(errorMessage);
+      }
+      const currentEmployee: Employee = await currentEmployeeResponse.json();
+      const existingDocuments = Array.isArray(currentEmployee.documents) ? currentEmployee.documents : [];
+      const updatedDocuments = existingDocuments.filter(doc => doc.id !== documentId);
+
       const response = await fetch(`/api/employees/${employeeId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documents: updatedDocuments }),
       });
       if (!response.ok) {
-        throw new Error(`Failed to delete employee document (Status: ${response.status})`);
+        let errorMessage = `Failed to delete employee document (Status: ${response.status})`;
+        try {
+          const errorData = await response.json();
+          if (errorData && errorData.message) {
+            errorMessage += `: ${errorData.message}`;
+          }
+        } catch (e) { /* Failed to parse JSON */ }
+        throw new Error(errorMessage);
       }
       const updatedEmployee: Employee = await response.json();
-      setEmployees(prev => prev.map(emp => emp.id === employeeId ? updatedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
-      return updatedEmployee;
+       // Ensure documents is an array and dates are Date objects
+      const processedEmployee = {
+        ...updatedEmployee,
+        documents: Array.isArray(updatedEmployee.documents) ? updatedEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+      };
+      setEmployees(prev => prev.map(emp => emp.id === employeeId ? processedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
+      return processedEmployee;
     } catch (error) {
       console.error("Error deleting employee document via API:", error);
       return null;
     } finally {
       setLoadingEmployees(false);
     }
-  }, [employees]);
+  }, []);
 
 
   // --- Other data functions (still in-memory) ---
