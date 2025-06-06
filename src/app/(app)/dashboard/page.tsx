@@ -1,13 +1,14 @@
+
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppData } from "@/context/app-data-context";
-import { DollarSign, TrendingUp, TrendingDown, CalendarClock, Users } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { format, subDays, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
+import { DollarSign, TrendingUp, TrendingDown, CalendarClock, Users, Building } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { format, subDays, eachDayOfInterval } from 'date-fns';
 
 export default function DashboardPage() {
-  const { totalRevenue, totalExpenses, netProfit, revenueEntries, expenseEntries, appointments } = useAppData();
+  const { totalRevenue, totalExpenses, netProfit, revenueEntries, expenseEntries, appointments, employees, invoices } = useAppData();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -36,6 +37,10 @@ export default function DashboardPage() {
     .filter(app => app.date >= new Date())
     .sort((a,b) => a.date.getTime() - b.date.getTime())
     .slice(0, 5);
+
+  const employeeCount = employees.length;
+  const uniqueCustomerNames = new Set(invoices.map(inv => inv.customerName));
+  const uniqueCustomerCount = uniqueCustomerNames.size;
 
   return (
     <div className="flex flex-col gap-6">
@@ -72,6 +77,26 @@ export default function DashboardPage() {
               {formatCurrency(netProfit)}
             </div>
             <p className="text-xs text-muted-foreground">All time profit</p>
+          </CardContent>
+        </Card>
+         <Card className="shadow-lg">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
+            <Users className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{employeeCount}</div>
+            <p className="text-xs text-muted-foreground">Active team members</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-lg">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Unique Customers</CardTitle>
+            <Building className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{uniqueCustomerCount}</div>
+            <p className="text-xs text-muted-foreground">Based on invoices</p>
           </CardContent>
         </Card>
       </div>
