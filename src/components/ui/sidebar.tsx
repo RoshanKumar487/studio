@@ -1,3 +1,4 @@
+
 "use client"
 
 import * as React from "react"
@@ -7,7 +8,7 @@ import { PanelLeft } from "lucide-react"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Button, type ButtonProps } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent } from "@/components/ui/sheet"
@@ -259,30 +260,44 @@ const Sidebar = React.forwardRef<
 )
 Sidebar.displayName = "Sidebar"
 
-const SidebarTrigger = React.forwardRef<
-  React.ElementRef<typeof Button>,
-  React.ComponentProps<typeof Button>
->(({ className, onClick, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar()
 
+const SidebarTrigger = React.forwardRef<
+  HTMLButtonElement,
+  ButtonProps // ButtonProps already includes asChild and children
+>(({ className, onClick, children, asChild = false, ...props }, ref) => {
+  const { toggleSidebar } = useSidebar();
+
+  const commonProps = {
+    ref: ref,
+    "data-sidebar": "trigger",
+    onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+      onClick?.(event); // Call original onClick if provided
+      toggleSidebar();
+    },
+    ...props, // Spread other props passed by the user
+  };
+
+  if (asChild) {
+    return (
+      <Slot {...commonProps} className={className}>
+        {children}
+      </Slot>
+    );
+  }
+
+  // Default rendering if not asChild
   return (
     <Button
-      ref={ref}
-      data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn("h-7 w-7", className)}
-      onClick={(event) => {
-        onClick?.(event)
-        toggleSidebar()
-      }}
-      {...props}
+      {...commonProps} // Common props including ref, onClick, data-*, user props
+      className={cn("h-7 w-7", className)} // Specific styles for default trigger
     >
       <PanelLeft />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
-  )
-})
+  );
+});
 SidebarTrigger.displayName = "SidebarTrigger"
 
 const SidebarRail = React.forwardRef<
@@ -761,3 +776,4 @@ export {
   SidebarTrigger,
   useSidebar,
 }
+
