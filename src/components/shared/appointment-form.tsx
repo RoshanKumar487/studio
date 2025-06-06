@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -29,17 +30,22 @@ interface AppointmentFormProps {
 export function AppointmentForm({ onSubmit, initialData, onCancel }: AppointmentFormProps) {
   const form = useForm<AppointmentFormData>({
     resolver: zodResolver(appointmentSchema),
-    defaultValues: initialData || {
-      date: new Date(),
-      time: '',
-      title: '',
-      description: '',
+    defaultValues: {
+      date: initialData?.date ?? new Date(),
+      time: initialData?.time ?? '',
+      title: initialData?.title ?? '',
+      description: initialData?.description ?? '',
     },
   });
 
   const handleFormSubmit: SubmitHandler<AppointmentFormData> = (data) => {
     onSubmit(data);
-    form.reset({ date: new Date(), time: '', title: '', description: '' });
+    form.reset({
+      date: new Date(),
+      time: '',
+      title: '',
+      description: '',
+    });
   };
 
   return (
