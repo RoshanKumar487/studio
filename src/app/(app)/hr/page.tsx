@@ -13,9 +13,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, FileText, UploadCloud, Trash2, Eye, FileUp } from 'lucide-react';
+import { Users, PlusCircle, FileText, Trash2, Eye, FileUp } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +29,6 @@ type EmployeeFormData = z.infer<typeof employeeSchema>;
 const documentSchema = z.object({
   name: z.string().min(1, "Document name is required.").max(100),
   description: z.string().max(200).optional(),
-  // File itself is handled outside the form schema for react-hook-form, but validated before submission logic
 });
 type DocumentFormData = z.infer<typeof documentSchema>;
 
@@ -65,23 +64,24 @@ export default function HrPage() {
 
   const onDocumentSubmit: SubmitHandler<DocumentFormData> = (data) => {
     if (selectedEmployee) {
-      const documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'> = { ...data };
+      const documentData: Partial<Omit<EmployeeDocument, 'id' | 'uploadedAt'>> = { ...data };
       if (selectedFile) {
         documentData.fileName = selectedFile.name;
         documentData.fileType = selectedFile.type;
         documentData.fileSize = selectedFile.size;
       }
-      addEmployeeDocument(selectedEmployee.id, documentData);
+      addEmployeeDocument(selectedEmployee.id, documentData as Omit<EmployeeDocument, 'id' | 'uploadedAt'>);
       toast({ title: "Document Record Added", description: `Document '${data.name}' added for ${selectedEmployee.name}.` });
       documentForm.reset();
       setSelectedFile(null);
+      // Refresh selected employee data to show new document
       setSelectedEmployee(prev => prev ? getEmployeeById(prev.id) : null); 
     }
   };
 
   const openDocumentDialog = (employee: Employee) => {
     setSelectedEmployee(employee);
-    documentForm.reset(); // Reset form when opening for a new employee or re-opening
+    documentForm.reset(); 
     setSelectedFile(null);
     setIsDocumentDialogMainOpen(true);
   };
@@ -196,7 +196,7 @@ export default function HrPage() {
         setIsDocumentDialogMainOpen(isOpen);
         if (!isOpen) {
             setSelectedEmployee(null);
-            setSelectedFile(null); // Clear selected file when dialog closes
+            setSelectedFile(null); 
         }
       }}>
         <DialogContent className="sm:max-w-2xl">
@@ -272,12 +272,10 @@ export default function HrPage() {
                             <Eye className="h-4 w-4" />
                             <span className="sr-only">Preview</span>
                           </Button>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                              <span className="sr-only">Delete</span>
-                            </Button>
-                          </AlertDialogTrigger>
+                          <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                            <span className="sr-only">Delete</span>
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
