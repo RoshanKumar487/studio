@@ -20,7 +20,7 @@ import {
 import { AppLogo } from '@/components/shared/app-logo';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LayoutDashboard, CalendarDays, TrendingUp, TrendingDown, Sparkles, Users, FileText, Clock, FileSpreadsheet } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, TrendingUp, TrendingDown, Sparkles, Users, FileText, Clock, FileSpreadsheet, PanelLeft } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -68,6 +68,7 @@ function AppLayoutContent({ children, pathname }: { children: ReactNode; pathnam
         <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/80 px-6 backdrop-blur-sm md:hidden">
           <SidebarTrigger asChild>
             <Button variant="outline" size="icon" className="shrink-0">
+               <PanelLeft className="h-5 w-5" />
                <span className="sr-only">Toggle navigation menu</span>
             </Button>
           </SidebarTrigger>
