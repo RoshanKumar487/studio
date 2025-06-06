@@ -148,7 +148,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [invoices]);
 
   const addInvoice = useCallback((invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>) => {
-    const subTotal = invoiceData.lineItems.reduce((sum, item) => sum + item.total, 0);
+    const subTotal = invoiceData.lineItems.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0);
     const taxAmount = subTotal * invoiceData.taxRate;
     const grandTotal = subTotal + taxAmount;
     
@@ -156,6 +156,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ...invoiceData,
       id: uuidv4(),
       invoiceNumber: getNextInvoiceNumber(),
+      lineItems: invoiceData.lineItems.map(item => ({
+        // Remove all properties from item except description, quantity, unitPrice
+        // This ensures that no 'id' from the form data is carried over.
+        description: item.description,
+        quantity: Number(item.quantity) || 0,
+        unitPrice: Number(item.unitPrice) || 0,
+        id: uuidv4(), // Always generate a new unique ID for stored line items
+        total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+      })),
       subTotal,
       taxAmount,
       grandTotal,
@@ -219,3 +228,5 @@ export function useAppData() {
   }
   return context;
 }
+
+    
