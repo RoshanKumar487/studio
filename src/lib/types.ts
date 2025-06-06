@@ -27,7 +27,10 @@ export interface EmployeeDocument {
   name: string;
   description?: string;
   uploadedAt: Date;
-  // fileUrl?: string; // Future: for actual file links
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number; // Store size in bytes
+  // fileUrl?: string; // Future: for actual file links from cloud storage
 }
 
 export interface Employee {

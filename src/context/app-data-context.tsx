@@ -157,12 +157,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       id: uuidv4(),
       invoiceNumber: getNextInvoiceNumber(),
       lineItems: invoiceData.lineItems.map(item => ({
-        // Remove all properties from item except description, quantity, unitPrice
-        // This ensures that no 'id' from the form data is carried over.
         description: item.description,
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.unitPrice) || 0,
-        id: uuidv4(), // Always generate a new unique ID for stored line items
+        id: uuidv4(), 
         total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
       })),
       subTotal,
@@ -228,5 +226,3 @@ export function useAppData() {
   }
   return context;
 }
-
-    

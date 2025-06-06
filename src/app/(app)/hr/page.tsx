@@ -15,9 +15,10 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, FileText, UploadCloud, Trash2, Eye } from 'lucide-react';
+import { Users, PlusCircle, FileText, UploadCloud, Trash2, Eye, FileUp } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
 const employeeSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters.").max(100),
@@ -28,6 +29,7 @@ type EmployeeFormData = z.infer<typeof employeeSchema>;
 const documentSchema = z.object({
   name: z.string().min(1, "Document name is required.").max(100),
   description: z.string().max(200).optional(),
+  // File itself is handled outside the form schema for react-hook-form, but validated before submission logic
 });
 type DocumentFormData = z.infer<typeof documentSchema>;
 
@@ -41,6 +43,7 @@ export default function HrPage() {
   const [isPreviewDocumentDialogOpen, setIsPreviewDocumentDialogOpen] = useState(false);
   const [documentToPreview, setDocumentToPreview] = useState<EmployeeDocument | null>(null);
   const [documentToDelete, setDocumentToDelete] = useState<{ empId: string, docId: string, docName: string } | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
 
   const employeeForm = useForm<EmployeeFormData>({
@@ -62,17 +65,24 @@ export default function HrPage() {
 
   const onDocumentSubmit: SubmitHandler<DocumentFormData> = (data) => {
     if (selectedEmployee) {
-      addEmployeeDocument(selectedEmployee.id, data);
+      const documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'> = { ...data };
+      if (selectedFile) {
+        documentData.fileName = selectedFile.name;
+        documentData.fileType = selectedFile.type;
+        documentData.fileSize = selectedFile.size;
+      }
+      addEmployeeDocument(selectedEmployee.id, documentData);
       toast({ title: "Document Record Added", description: `Document '${data.name}' added for ${selectedEmployee.name}.` });
       documentForm.reset();
-      // Note: We don't close the main document dialog here, user might want to add more.
-      // Refresh selected employee to show new document
+      setSelectedFile(null);
       setSelectedEmployee(prev => prev ? getEmployeeById(prev.id) : null); 
     }
   };
 
   const openDocumentDialog = (employee: Employee) => {
     setSelectedEmployee(employee);
+    documentForm.reset(); // Reset form when opening for a new employee or re-opening
+    setSelectedFile(null);
     setIsDocumentDialogMainOpen(true);
   };
 
@@ -86,8 +96,26 @@ export default function HrPage() {
       deleteEmployeeDocument(documentToDelete.empId, documentToDelete.docId);
       toast({ title: "Document Deleted", description: `Document '${documentToDelete.docName}' has been deleted.` });
       setSelectedEmployee(prev => prev ? getEmployeeById(prev.id) : null);
-      setDocumentToDelete(null); // Close confirmation dialog
+      setDocumentToDelete(null); 
     }
+  };
+  
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+    } else {
+      setSelectedFile(null);
+    }
+  };
+
+  const formatFileSize = (bytes?: number): string => {
+    if (bytes === undefined || bytes === null) return "N/A";
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
   
   return (
@@ -164,10 +192,12 @@ export default function HrPage() {
         </CardContent>
       </Card>
 
-      {/* Dialog for Adding/Managing Documents for Selected Employee */}
       <Dialog open={isDocumentDialogMainOpen} onOpenChange={(isOpen) => {
         setIsDocumentDialogMainOpen(isOpen);
-        if (!isOpen) setSelectedEmployee(null); 
+        if (!isOpen) {
+            setSelectedEmployee(null);
+            setSelectedFile(null); // Clear selected file when dialog closes
+        }
       }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -195,20 +225,16 @@ export default function HrPage() {
                     </FormItem>
                   )} />
                   <FormItem>
-                    <FormLabel>Upload File (Simulated)</FormLabel>
+                    <FormLabel>Upload File</FormLabel>
                     <FormControl>
-                      <div className="flex items-center justify-center w-full">
-                        <label htmlFor="dropzone-file-simulated" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted hover:bg-muted/80">
-                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                <UploadCloud className="w-8 h-8 mb-2 text-muted-foreground" />
-                                <p className="mb-1 text-sm text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                                <p className="text-xs text-muted-foreground">(Actual file upload not implemented)</p>
-                            </div>
-                            <input id="dropzone-file-simulated" type="file" className="hidden" disabled />
-                        </label>
-                      </div> 
+                      <Input type="file" onChange={handleFileChange} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"/>
                     </FormControl>
-                    <FormDescription>For demo purposes, only document name and description will be saved.</FormDescription>
+                    {selectedFile && (
+                        <FormDescription>
+                            Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                        </FormDescription>
+                    )}
+                    <FormDescription>Actual file upload to a server is not implemented in this demo.</FormDescription>
                   </FormItem>
                   <Button type="submit"><PlusCircle className="mr-2 h-4 w-4"/> Add Document Record</Button>
                 </form>
@@ -224,7 +250,7 @@ export default function HrPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead>Description</TableHead>
+                      <TableHead>File</TableHead>
                       <TableHead>Uploaded At</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -233,7 +259,13 @@ export default function HrPage() {
                     {selectedEmployee.documents.map(doc => (
                       <TableRow key={doc.id}>
                         <TableCell className="font-medium">{doc.name}</TableCell>
-                        <TableCell className="truncate max-w-xs">{doc.description || 'N/A'}</TableCell>
+                        <TableCell className="truncate max-w-xs">
+                          {doc.fileName ? (
+                             <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                                <FileUp className="h-3 w-3"/> {doc.fileName}
+                             </Badge>
+                          ) : 'No file'}
+                        </TableCell>
                         <TableCell>{format(doc.uploadedAt, "PPP p")}</TableCell>
                         <TableCell className="text-right space-x-1">
                           <Button variant="ghost" size="icon" onClick={() => handleOpenPreviewDialog(doc)}>
@@ -260,7 +292,6 @@ export default function HrPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Preview Document Dialog */}
       <Dialog open={isPreviewDocumentDialogOpen} onOpenChange={setIsPreviewDocumentDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -268,10 +299,17 @@ export default function HrPage() {
           </DialogHeader>
           {documentToPreview && (
             <div className="space-y-3 py-4">
-              <p><span className="font-semibold">Name:</span> {documentToPreview.name}</p>
+              <p><span className="font-semibold">Document Title:</span> {documentToPreview.name}</p>
               <p><span className="font-semibold">Description:</span> {documentToPreview.description || "N/A"}</p>
               <p><span className="font-semibold">Uploaded At:</span> {format(documentToPreview.uploadedAt, "PPP p")}</p>
-               <p className="text-sm text-muted-foreground pt-4">Actual file content preview is not available in this demo.</p>
+              {documentToPreview.fileName && (
+                <>
+                  <p><span className="font-semibold">File Name:</span> {documentToPreview.fileName}</p>
+                  <p><span className="font-semibold">File Type:</span> {documentToPreview.fileType || "N/A"}</p>
+                  <p><span className="font-semibold">File Size:</span> {formatFileSize(documentToPreview.fileSize)}</p>
+                </>
+              )}
+               <p className="text-sm text-muted-foreground pt-4">Actual file content preview/download is not available in this demo (no actual file upload is implemented).</p>
             </div>
           )}
           <DialogFooter>
@@ -280,7 +318,6 @@ export default function HrPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Document Confirmation Dialog */}
       <AlertDialog open={!!documentToDelete} onOpenChange={(isOpen) => !isOpen && setDocumentToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
