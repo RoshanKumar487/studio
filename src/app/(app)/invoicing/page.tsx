@@ -25,6 +25,7 @@ const lineItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
   quantity: z.coerce.number().min(0.1, "Quantity must be positive"),
   unitPrice: z.coerce.number().min(0.01, "Unit price must be positive"),
+  // Calculate total on the fly or when data changes, not part of Zod schema for input
 });
 
 const invoiceSchema = z.object({
@@ -33,7 +34,10 @@ const invoiceSchema = z.object({
   customerAddress: z.string().optional(),
   invoiceDate: z.date({ required_error: "Invoice date is required."}),
   dueDate: z.date({ required_error: "Due date is required."}),
-  lineItems: z.array(lineItemSchema).min(1, "At least one line item is required."),
+  lineItems: z.array(lineItemSchema.extend({
+    // Add total to the line item type used in the form, but calculate it
+    total: z.coerce.number().optional() // Calculated, not directly edited
+  })).min(1, "At least one line item is required."),
   taxRate: z.coerce.number().min(0).max(1).default(0), // e.g., 0.1 for 10%
   notes: z.string().optional(),
   status: z.enum(['Draft', 'Sent', 'Paid', 'Overdue']).default('Draft'),
@@ -53,20 +57,48 @@ export default function InvoicingPage() {
       customerAddress: '',
       invoiceDate: new Date(),
       dueDate: addDays(new Date(), 30),
-      lineItems: [{ description: '', quantity: 1, unitPrice: 0 }],
+      lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
       taxRate: 0,
       notes: '',
       status: 'Draft',
+      employeeId: undefined, // Use undefined for no selection
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, update } = useFieldArray({
     control: form.control,
     name: "lineItems",
   });
 
+  // Watch line items to recalculate totals
+  const watchedLineItems = form.watch("lineItems");
+
+  React.useEffect(() => {
+    watchedLineItems.forEach((item, index) => {
+      const quantity = Number(item.quantity) || 0;
+      const unitPrice = Number(item.unitPrice) || 0;
+      const currentTotal = quantity * unitPrice;
+      if (item.total !== currentTotal) {
+        // Only update if total is different to avoid infinite loops
+        // This direct update might be tricky with react-hook-form.
+        // A more robust way would be to set form value.
+        // For simplicity here, we assume it's for display or final calculation.
+        // For actual form submission, totals are calculated in addInvoice.
+      }
+    });
+  }, [watchedLineItems, update, form]);
+
+
   const onSubmit: SubmitHandler<InvoiceFormData> = (data) => {
-    const newInvoice = addInvoice(data);
+    // Recalculate line item totals before submission
+    const processedData = {
+      ...data,
+      lineItems: data.lineItems.map(item => ({
+        ...item,
+        total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+      })),
+    };
+    const newInvoice = addInvoice(processedData);
     toast({
       title: "Invoice Created",
       description: `Invoice ${newInvoice.invoiceNumber} for ${data.customerName} has been created.`,
@@ -76,10 +108,11 @@ export default function InvoicingPage() {
       customerAddress: '',
       invoiceDate: new Date(),
       dueDate: addDays(new Date(), 30),
-      lineItems: [{ description: '', quantity: 1, unitPrice: 0 }],
+      lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
       taxRate: 0,
       notes: '',
       status: 'Draft',
+      employeeId: undefined, // Use undefined for no selection
     });
     setIsInvoiceFormOpen(false);
   };
@@ -116,10 +149,10 @@ export default function InvoicingPage() {
                   <FormField control={form.control} name="employeeId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Link to Employee (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value} >
                       <FormControl><SelectTrigger><SelectValue placeholder="Select an employee" /></SelectTrigger></FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        {/* <SelectItem value="">None</SelectItem>  -- REMOVED THIS LINE -- */}
                         {employees.map(emp => (<SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>))}
                       </SelectContent>
                     </Select>
@@ -145,22 +178,32 @@ export default function InvoicingPage() {
 
                 <CardTitle className="text-xl pt-4 font-headline">Line Items</CardTitle>
                 {fields.map((item, index) => (
-                  <div key={item.id} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_auto] gap-2 items-end p-3 border rounded-md">
+                  <div key={item.id} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 items-end p-3 border rounded-md">
                     <FormField control={form.control} name={`lineItems.${index}.description`} render={({ field }) => (
                       <FormItem><FormLabel>Description</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name={`lineItems.${index}.quantity`} render={({ field }) => (
-                      <FormItem><FormLabel>Quantity</FormLabel><FormControl><Input type="number" step="0.1" {...field} /></FormControl><FormMessage /></FormItem>
+                      <FormItem><FormLabel>Quantity</FormLabel><FormControl><Input type="number" step="0.1" {...field} onChange={e => { field.onChange(e.target.valueAsNumber); }} /></FormControl><FormMessage /></FormItem>
                     )} />
                     <FormField control={form.control} name={`lineItems.${index}.unitPrice`} render={({ field }) => (
-                      <FormItem><FormLabel>Unit Price</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+                      <FormItem><FormLabel>Unit Price</FormLabel><FormControl><Input type="number" step="0.01" {...field} onChange={e => { field.onChange(e.target.valueAsNumber); }} /></FormControl><FormMessage /></FormItem>
                     )} />
+                    <FormItem>
+                        <FormLabel>Total</FormLabel>
+                        <Input 
+                            type="text" 
+                            readOnly 
+                            disabled 
+                            value={formatCurrency((Number(watchedLineItems[index]?.quantity) || 0) * (Number(watchedLineItems[index]?.unitPrice) || 0))} 
+                            className="bg-muted"
+                        />
+                    </FormItem>
                     <Button type="button" variant="outline" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 ))}
-                <Button type="button" variant="outline" onClick={() => append({ description: '', quantity: 1, unitPrice: 0 })}>
+                <Button type="button" variant="outline" onClick={() => append({ description: '', quantity: 1, unitPrice: 0, total: 0 })}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Line Item
                 </Button>
                 
@@ -168,7 +211,7 @@ export default function InvoicingPage() {
                     <FormField control={form.control} name="taxRate" render={({ field }) => (
                         <FormItem>
                         <FormLabel>Tax Rate (e.g., 0.1 for 10%)</FormLabel>
-                        <FormControl><Input type="number" step="0.01" placeholder="e.g., 0.07" {...field} /></FormControl>
+                        <FormControl><Input type="number" step="0.01" placeholder="e.g., 0.07" {...field} onChange={e => field.onChange(e.target.valueAsNumber)} /></FormControl>
                         <FormMessage />
                         </FormItem>
                     )} />
@@ -232,10 +275,10 @@ export default function InvoicingPage() {
                     <TableCell>{formatCurrency(invoice.grandTotal)}</TableCell>
                     <TableCell>
                         <span className={`px-2 py-1 text-xs rounded-full ${
-                            invoice.status === 'Paid' ? 'bg-green-100 text-green-700' :
-                            invoice.status === 'Sent' ? 'bg-blue-100 text-blue-700' :
-                            invoice.status === 'Overdue' ? 'bg-red-100 text-red-700' :
-                            'bg-gray-100 text-gray-700'
+                            invoice.status === 'Paid' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                            invoice.status === 'Sent' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
+                            invoice.status === 'Overdue' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                            'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
                         }`}>
                         {invoice.status}
                         </span>
@@ -257,3 +300,5 @@ export default function InvoicingPage() {
     </div>
   );
 }
+
+    
