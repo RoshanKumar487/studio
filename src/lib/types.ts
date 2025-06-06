@@ -23,21 +23,20 @@ export interface Appointment {
 }
 
 export interface EmployeeDocument {
-  id: string;
+  id: string; // This will be the ID within the employee's documents array
   name: string;
   description?: string;
   uploadedAt: Date;
   fileName?: string;
   fileType?: string;
   fileSize?: number; // Store size in bytes
-  // fileUrl?: string; // Future: for actual file links from cloud storage
 }
 
 export interface Employee {
-  id: string;
+  id: string; // This will be the Firestore document ID
   name: string;
   email?: string;
-  documents: EmployeeDocument[];
+  documents: EmployeeDocument[]; // Documents will be an array within the employee object in Firestore
 }
 
 export interface TimesheetEntry {
