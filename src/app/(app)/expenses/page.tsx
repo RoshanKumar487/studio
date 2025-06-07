@@ -17,16 +17,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ArrowUpDown, PlusCircle, Paperclip, Camera, Loader2, VideoOff, XCircle, FileWarning, Download, Image as ImageIcon, Eye, FileText, InfoIcon } from 'lucide-react';
+import { ArrowUpDown, PlusCircle, Paperclip, Camera, Loader2, VideoOff, XCircle, FileWarning, Download, Image as ImageIcon, Eye, FileText, InfoIcon, Printer } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { format } from 'date-fns';
+import { format, endOfDay } from 'date-fns';
 import NextImage from 'next/image';
 
 const expenseSchema = z.object({
   date: z.date({ required_error: "Date is required." }),
   amount: z.coerce.number().min(0.01, "Amount must be positive."),
   category: z.string().min(1, "Category is required.").max(50, "Category too long."),
-  description: z.string().max(200, "Description too long.").optional().or(z.literal('')), // Made optional
+  description: z.string().max(200, "Description too long.").optional().or(z.literal('')),
   submittedBy: z.string().max(100, "Submitter name too long.").optional().or(z.literal('')),
 });
 
@@ -58,6 +58,11 @@ export default function ExpensesPage() {
   const [historyAttachmentToView, setHistoryAttachmentToView] = useState<HistoryAttachmentInfo | null>(null);
   const [isHistoryAttachmentDialogValidOpen, setIsHistoryAttachmentDialogValidOpen] = useState(false);
 
+  const [reportStartDate, setReportStartDate] = useState<Date | undefined>(undefined);
+  const [reportEndDate, setReportEndDate] = useState<Date | undefined>(undefined);
+  const [expensesForReport, setExpensesForReport] = useState<ExpenseEntry[] | null>(null);
+  const [reportPeriodString, setReportPeriodString] = useState<string>("");
+
 
   const form = useForm<ExpenseFormData>({
     resolver: zodResolver(expenseSchema),
@@ -76,6 +81,55 @@ export default function ExpensesPage() {
       stopCameraStream();
     };
   }, [imagePreviewUrl]);
+
+  // Effect to trigger print when report data is ready
+  useEffect(() => {
+    if (expensesForReport) { // Check if it's not null (meaning report generation was triggered)
+      if (expensesForReport.length > 0) {
+        const timer = setTimeout(() => {
+          window.print();
+          setExpensesForReport(null); 
+          setReportPeriodString("");
+        }, 250); // Increased delay slightly
+        return () => clearTimeout(timer);
+      } else {
+        // If report generated but was empty, still clear it after a bit
+         const timer = setTimeout(() => {
+            setExpensesForReport(null); 
+            setReportPeriodString("");
+         }, 250);
+         return () => clearTimeout(timer);
+      }
+    }
+  }, [expensesForReport]);
+
+  const handleGenerateAndPrintReport = () => {
+    if (!reportStartDate || !reportEndDate) {
+      toast({ title: "Date Range Required", description: "Please select both a start and end date for the report.", variant: "destructive" });
+      return;
+    }
+    if (reportStartDate > reportEndDate) {
+      toast({ title: "Invalid Date Range", description: "Start date cannot be after end date.", variant: "destructive" });
+      return;
+    }
+
+    const filtered = sortedExpenseEntries.filter(entry => { // Use sorted/existing entries
+      const entryDate = new Date(entry.date); // Ensure entry.date is a Date object
+      return entryDate >= reportStartDate && entryDate <= endOfDay(reportEndDate);
+    });
+
+    setReportPeriodString(`Expense Report: ${format(reportStartDate, "PPP")} - ${format(reportEndDate, "PPP")}`);
+    
+    if (filtered.length === 0) {
+      toast({ title: "No Data", description: "No expenses found for the selected period.", variant: "default" });
+      setExpensesForReport([]); // Set to empty array to trigger useEffect and show "No expenses found" in report section
+      return;
+    }
+
+    setExpensesForReport(filtered);
+    // The useEffect will trigger window.print()
+  };
+
 
   const stopCameraStream = () => {
     if (videoRef.current && videoRef.current.srcObject) {
@@ -232,9 +286,9 @@ export default function ExpensesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-3xl font-bold font-headline tracking-tight">Expense Management</h1>
+      <h1 className="text-3xl font-bold font-headline tracking-tight no-print-section">Expense Management</h1>
       
-      <Card className="shadow-lg">
+      <Card className="shadow-lg no-print-section">
         <CardHeader>
           <CardTitle className="font-headline flex items-center"><PlusCircle className="mr-2 h-6 w-6 text-primary" /> Add New Expense</CardTitle>
         </CardHeader>
@@ -330,7 +384,7 @@ export default function ExpensesPage() {
                           className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
                         />
                       </FormControl>
-                      <Button type="button" variant="outline" onClick={startCamera} className="shrink-0" size="default"> {/* Changed size to default */}
+                      <Button type="button" variant="outline" onClick={startCamera} className="shrink-0" size="default">
                         <Camera className="mr-2 h-4 w-4" /> Capture
                       </Button>
                     </div>
@@ -415,7 +469,33 @@ export default function ExpensesPage() {
         </CardContent>
       </Card>
 
-      <Card className="shadow-lg">
+      <Card className="shadow-lg no-print-section">
+        <CardHeader>
+          <CardTitle className="font-headline flex items-center">
+            <Printer className="mr-2 h-6 w-6 text-primary" /> Generate Expense Report (PDF)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <FormLabel>Report Start Date <span className="text-destructive">*</span></FormLabel>
+              <DatePicker date={reportStartDate} setDate={setReportStartDate} />
+            </div>
+            <div>
+              <FormLabel>Report End Date <span className="text-destructive">*</span></FormLabel>
+              <DatePicker date={reportEndDate} setDate={setReportEndDate} />
+            </div>
+          </div>
+          <Button onClick={handleGenerateAndPrintReport} className="w-full md:w-auto">
+            <Printer className="mr-2 h-4 w-4" /> Generate & Print Report
+          </Button>
+          <FormDescription className="text-xs">
+            This will prepare a printable view of expenses for the selected date range. Use your browser's print dialog to "Save as PDF".
+          </FormDescription>
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-lg no-print-section">
         <CardHeader>
           <CardTitle className="font-headline">Expense History</CardTitle>
         </CardHeader>
@@ -539,9 +619,99 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Hidden section for the printable report */}
+      {expensesForReport && (
+        <div id="expense-report-section" className="printable-report-area">
+          <h2 className="text-2xl font-bold mb-2">{reportPeriodString}</h2>
+          {expensesForReport.length > 0 ? (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead>Submitted By</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expensesForReport.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell>{format(entry.date, "PPP")}</TableCell>
+                      <TableCell>{entry.category}</TableCell>
+                      <TableCell>{entry.description}</TableCell>
+                      <TableCell>{entry.submittedBy || 'N/A'}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(entry.amount)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="text-right font-bold mt-4" style={{textAlign: "right", fontWeight: "bold", marginTop: "1rem"}}>
+                Total Expenses for Period: {formatCurrency(expensesForReport.reduce((sum, entry) => sum + entry.amount, 0))}
+              </div>
+            </>
+          ) : (
+            <p>No expenses found for the selected period.</p>
+          )}
+          <p className="text-xs text-muted-foreground mt-4" style={{fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", marginTop: "1rem"}}>Generated on: {format(new Date(), "PPP p")}</p>
+        </div>
+      )}
+
+      <style jsx global>{`
+        .printable-report-area {
+          display: none; 
+        }
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          .no-print-section, .no-print-section * {
+              display: none !important;
+              visibility: hidden !important;
+          }
+          #expense-report-section, #expense-report-section * {
+            visibility: visible !important;
+          }
+          #expense-report-section {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            padding: 20px !important;
+            font-size: 10pt !important;
+            background-color: white !important; /* Ensure background is white for printing */
+          }
+          #expense-report-section h2 {
+            font-size: 16pt !important;
+            margin-bottom: 10px !important;
+          }
+          #expense-report-section table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            margin-top: 10px !important;
+          }
+          #expense-report-section th, #expense-report-section td {
+            border: 1px solid #ccc !important;
+            padding: 5px !important; /* Adjusted padding */
+            text-align: left !important;
+             color: #000 !important; /* Ensure text is black for printing */
+          }
+          #expense-report-section th {
+            background-color: #f0f0f0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            font-weight: bold !important;
+          }
+          #expense-report-section .text-right { /* Specific for amount column */
+              text-align: right !important;
+          }
+          #expense-report-section .text-muted-foreground {
+              color: #555 !important; /* Darker muted for print */
+          }
+        }
+      `}</style>
+
     </div>
   );
 }
-
-
-    
