@@ -16,7 +16,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { DatePicker } from '@/components/shared/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSpreadsheet, PlusCircle, Trash2, Eye, Check, ChevronsUpDown, Mail, FilterX, Search } from 'lucide-react';
+import { FileSpreadsheet, PlusCircle, Trash2, Eye, Check, ChevronsUpDown, Mail, FilterX, Search, Filter } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format, addDays, startOfDay, endOfDay } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
@@ -63,6 +63,7 @@ export default function InvoicingPage() {
   const [serviceProviderSearchText, setServiceProviderSearchText] = useState("");
 
   // Filters State
+  const [isFilterOpen, setIsFilterOpen] = useState(false); // New state for filter visibility
   const [filterStartDate, setFilterStartDate] = useState<Date | undefined>(undefined);
   const [filterEndDate, setFilterEndDate] = useState<Date | undefined>(undefined);
   const [filterStatus, setFilterStatus] = useState<string>("All");
@@ -239,51 +240,56 @@ export default function InvoicingPage() {
       </div>
 
       <Card className="shadow-lg">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="font-headline flex items-center gap-2">
-            <Search className="h-5 w-5 text-primary"/>
+            <Filter className="h-5 w-5 text-primary"/>
             Filter Invoices
           </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="filter-start-date">Start Date</Label>
-              <DatePicker date={filterStartDate} setDate={setFilterStartDate} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="filter-end-date">End Date</Label>
-              <DatePicker date={filterEndDate} setDate={setFilterEndDate} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="filter-status">Status</Label>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger id="filter-status">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Statuses</SelectItem>
-                  {invoiceStatuses.map(status => (
-                    <SelectItem key={status} value={status}>{status}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1 md:col-span-2 lg:col-span-1">
-              <Label htmlFor="filter-customer">Customer Name</Label>
-              <Input 
-                id="filter-customer"
-                type="text"
-                placeholder="Search by customer name..."
-                value={filterCustomerName}
-                onChange={(e) => setFilterCustomerName(e.target.value)}
-              />
-            </div>
-          </div>
-          <Button onClick={resetFilters} variant="outline" size="sm">
-            <FilterX className="mr-2 h-4 w-4" /> Reset Filters
+          <Button variant="ghost" size="icon" onClick={() => setIsFilterOpen(!isFilterOpen)} aria-label="Toggle filters">
+            <Search className="h-5 w-5" />
           </Button>
-        </CardContent>
+        </CardHeader>
+        {isFilterOpen && (
+          <CardContent className="space-y-4 pt-4 animate-in fade-in-0 duration-300">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="filter-start-date">Start Date</Label>
+                <DatePicker date={filterStartDate} setDate={setFilterStartDate} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="filter-end-date">End Date</Label>
+                <DatePicker date={filterEndDate} setDate={setFilterEndDate} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="filter-status">Status</Label>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger id="filter-status">
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Statuses</SelectItem>
+                    {invoiceStatuses.map(status => (
+                      <SelectItem key={status} value={status}>{status}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1 md:col-span-2 lg:col-span-1">
+                <Label htmlFor="filter-customer">Customer Name</Label>
+                <Input 
+                  id="filter-customer"
+                  type="text"
+                  placeholder="Search by customer name..."
+                  value={filterCustomerName}
+                  onChange={(e) => setFilterCustomerName(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button onClick={resetFilters} variant="outline" size="sm">
+              <FilterX className="mr-2 h-4 w-4" /> Reset Filters
+            </Button>
+          </CardContent>
+        )}
       </Card>
 
 
