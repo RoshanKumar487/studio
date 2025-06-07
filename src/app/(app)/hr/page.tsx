@@ -676,3 +676,5 @@ export default function HrPage() {
     </div>
   );
 }
+
+    
