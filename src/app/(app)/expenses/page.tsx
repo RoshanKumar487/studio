@@ -306,7 +306,7 @@ export default function ExpensesPage() {
                 <FormLabel>Attach Receipt/Document (Optional)</FormLabel>
                 {!isCameraMode && (
                   <div className="space-y-2">
-                    <div className="flex items-stretch gap-2">
+                    <div className="flex items-center gap-2"> {/* Changed items-stretch to items-center for better vertical alignment of content */}
                       <FormControl className="flex-grow min-w-0">
                         <Input 
                           type="file" 
@@ -315,7 +315,7 @@ export default function ExpensesPage() {
                           className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
                         />
                       </FormControl>
-                      <Button type="button" variant="outline" onClick={startCamera} size="sm" className="shrink-0">
+                      <Button type="button" variant="outline" onClick={startCamera} className="shrink-0"> {/* Removed size="sm" */}
                         <Camera className="mr-2 h-4 w-4" /> Capture
                       </Button>
                     </div>
