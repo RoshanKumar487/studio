@@ -144,21 +144,45 @@ export default function ExpensesPage() {
   const startCamera = async () => {
     stopCameraStream();
     setIsCameraMode(true);
-    setHasCameraPermission(null);
+    setHasCameraPermission(null); // Reset permission status while attempting
+    let stream: MediaStream | null = null;
+
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) videoRef.current.srcObject = stream;
+        // Attempt to get the back camera first
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        console.log("Using environment (back) camera.");
+      } catch (envError) {
+        console.warn("Could not get environment camera, attempting default/user camera:", envError);
+        try {
+          // Fallback to any available camera (usually front)
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          console.log("Using default/user (front) camera.");
+        } catch (defaultError) {
+          console.error("Error accessing any camera:", defaultError);
+          setHasCameraPermission(false);
+          toast({
+            variant: "destructive",
+            title: "Camera Access Denied",
+            description: "Could not access any camera. Please enable camera permissions in your browser settings.",
+          });
+          setIsCameraMode(false);
+          return; // Exit if no camera access at all
+        }
+      }
+
+      if (stream && videoRef.current) {
+        videoRef.current.srcObject = stream;
         setHasCameraPermission(true);
-      } catch (err) {
-        console.error("Error accessing camera:", err);
+      } else {
+        // This case should ideally be caught by the errors above
         setHasCameraPermission(false);
-        toast({ variant: "destructive", title: "Camera Access Denied", description: "Please enable camera permissions." });
+        toast({ variant: "destructive", title: "Camera Error", description: "Could not initialize camera stream." });
         setIsCameraMode(false);
       }
     } else {
       setHasCameraPermission(false);
-      toast({ variant: "destructive", title: "Camera Not Supported" });
+      toast({ variant: "destructive", title: "Camera Not Supported", description: "Your browser does not support camera access." });
       setIsCameraMode(false);
     }
   };
