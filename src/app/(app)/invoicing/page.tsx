@@ -280,7 +280,7 @@ export default function InvoicingPage() {
         </Button>
       </div>
 
-      <Card className="shadow-lg">
+      <Card className="shadow-lg md:max-w-3xl">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="font-headline flex items-center gap-2">
             <Filter className="h-5 w-5 text-primary"/>
