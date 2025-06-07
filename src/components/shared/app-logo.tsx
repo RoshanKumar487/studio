@@ -9,26 +9,28 @@ interface AppLogoProps {
 
 export function AppLogo({ collapsed, size = 'default' }: AppLogoProps) {
   const isSmall = size === 'sm';
+
+  // Construct the full class string for the main div conditionally
+  const divClasses = cn(
+    isSmall
+      ? "flex items-center gap-2 p-2 font-headline text-base font-semibold text-muted-foreground"
+      : "flex items-center gap-2 p-2 font-headline text-xl font-semibold text-sidebar-primary"
+  );
+
+  // Construct the full class string for the icon conditionally
+  const iconClasses = cn(
+    isSmall 
+      ? "h-4 w-4 shrink-0" 
+      : "h-7 w-7 shrink-0"
+  );
+
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 p-2 font-headline", // Common base classes
-        isSmall 
-          ? "font-semibold text-base text-muted-foreground" // Grouped classes for small size
-          : "font-semibold text-xl text-sidebar-primary"   // Grouped classes for default size
-      )}
-    >
-      <BriefcaseBusiness
-        className={cn(
-          "shrink-0", // Apply shrink-0 unconditionally as a separate argument
-          isSmall ? "h-4 w-4" : "h-7 w-7" // Apply size conditionally as a separate argument
-        )}
-      />
+    <div className={divClasses}>
+      <BriefcaseBusiness className={iconClasses} />
       {!collapsed && (
         <span className={cn(
-            "duration-200 transition-opacity ease-linear", 
-            // This condition means: if this logo is NOT small AND the sidebar is in icon mode, then make the span transparent.
-            // If the logo IS small (size === 'sm'), this opacity rule does not apply.
+            "duration-200 transition-opacity ease-linear",
+            // This condition for opacity based on sidebar state
             size !== 'sm' && "group-data-[collapsible=icon]:opacity-0"
           )}
         >
