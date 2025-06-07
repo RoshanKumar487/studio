@@ -36,6 +36,7 @@ const prompt = ai.definePrompt({
   input: { schema: SendInvoiceEmailInputSchema },
   output: { schema: SendInvoiceEmailOutputSchema },
   prompt: `You are an invoicing assistant. A request has been made to send invoice {{invoiceNumber}} for customer "{{customerName}}" to the email address: {{recipientEmail}}.
+  It is assumed that the actual invoice PDF named "Invoice {{invoiceNumber}}.pdf" will be attached to this email.
   
 Generate a professional email subject and body for this invoice.
 The company sending the invoice is "FlowHQ".
@@ -48,15 +49,14 @@ Example: "Invoice {{invoiceNumber}} from FlowHQ for {{customerName}}"
 
 Email Body:
 - Start with a polite greeting to "{{customerName}}".
-- Clearly state that their invoice {{invoiceNumber}} from FlowHQ is ready/attached.
-  (Assume for this simulation that the invoice itself would be attached or linked separately).
+- Clearly state that their invoice {{invoiceNumber}} from FlowHQ is attached (or available via a link if you prefer that phrasing, but mention the attachment concept).
 - You can include a brief thank you for their business.
 - End with a professional closing (e.g., "Sincerely," or "Best regards,").
 - Sign off with "The FlowHQ Team" or "FlowHQ".
 
 Respond with:
 - success: true
-- message: A confirmation message like "Email for invoice {{invoiceNumber}} to {{customerName}} prepared and simulated as sent."
+- message: A confirmation message like "Email for invoice {{invoiceNumber}} to {{customerName}} prepared and simulated as sent, with Invoice {{invoiceNumber}}.pdf notionally attached."
 - emailSubject: The generated subject line.
 - emailBody: The generated email body.
 
@@ -90,11 +90,9 @@ const sendInvoiceEmailFlow = ai.defineFlow(
     
     return {
         success: output.success !== undefined ? output.success : true,
-        message: output.message || `Successfully simulated sending invoice ${input.invoiceNumber} to ${input.recipientEmail}.`,
+        message: output.message || `Successfully simulated sending invoice ${input.invoiceNumber} (with PDF attachment) to ${input.recipientEmail}.`,
         emailSubject: output.emailSubject || `Invoice ${input.invoiceNumber} from FlowHQ`,
         emailBody: output.emailBody || `Dear ${input.customerName},\n\nPlease find your invoice ${input.invoiceNumber} attached.\n\nThank you for your business,\nFlowHQ Team`,
     };
   }
 );
-
-    

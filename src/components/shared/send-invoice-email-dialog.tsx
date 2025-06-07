@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Label } from '@/components/ui/label';
-import { Loader2, Mail } from 'lucide-react';
+import { Loader2, Mail, Paperclip } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { sendInvoiceEmail, type SendInvoiceEmailOutput } from '@/ai/flows/send-invoice-email-flow';
 import { Textarea } from '../ui/textarea';
@@ -33,12 +33,9 @@ type EmailFormData = z.infer<typeof emailSchema>;
 
 export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: SendInvoiceEmailDialogProps) {
   const { toast } = useToast();
-  const [isSending, setIsSending] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // Renamed from isSending
   const [step, setStep] = useState<'enter_email' | 'preview_email' | 'sent_confirmation'>('enter_email');
   
-  // State for AI generated content and user-editable content
-  const [generatedSubject, setGeneratedSubject] = useState('');
-  const [generatedBody, setGeneratedBody] = useState('');
   const [editableSubject, setEditableSubject] = useState('');
   const [editableBody, setEditableBody] = useState('');
 
@@ -51,8 +48,6 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
   useEffect(() => {
     if (isOpen) {
       form.reset({ recipientEmail: '' });
-      setGeneratedSubject('');
-      setGeneratedBody('');
       setEditableSubject('');
       setEditableBody('');
       setStep('enter_email');
@@ -64,7 +59,7 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
       toast({ title: "Error", description: "No invoice selected.", variant: "destructive" });
       return;
     }
-    setIsSending(true);
+    setIsProcessing(true);
     try {
       const result: SendInvoiceEmailOutput = await sendInvoiceEmail({
         invoiceId: invoiceData.id,
@@ -74,51 +69,65 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
       });
 
       if (result.success && result.emailSubject && result.emailBody) {
-        setGeneratedSubject(result.emailSubject);
-        setGeneratedBody(result.emailBody);
         setEditableSubject(result.emailSubject);
         setEditableBody(result.emailBody);
         setStep('preview_email');
       } else {
         toast({ title: "Preview Generation Failed", description: result.message || "Could not generate email preview.", variant: "destructive" });
-        setGeneratedSubject('');
-        setGeneratedBody('');
         setEditableSubject('');
         setEditableBody('');
       }
     } catch (error: any) {
       console.error("Generate Email Preview Error:", error);
       toast({ title: "Error", description: error.message || "Failed to generate email preview.", variant: "destructive" });
-      setGeneratedSubject('');
-      setGeneratedBody('');
       setEditableSubject('');
       setEditableBody('');
     } finally {
-      setIsSending(false);
+      setIsProcessing(false);
     }
   };
 
 
   const handleSendEmail = async () => {
     if (!invoiceData || !editableSubject || !editableBody || !form.getValues("recipientEmail")) {
-      toast({ title: "Error", description: "Missing data to send email. Subject and body are required.", variant: "destructive" });
+      toast({ title: "Error", description: "Missing data to send email. Subject, body, and recipient email are required.", variant: "destructive" });
       return;
     }
-    setIsSending(true);
-    // Simulate sending with current editableSubject and editableBody
-    // For this demo, we'll just show the confirmation based on these editable fields
-    // A real app might call another API endpoint here to actually send the email with the user-modified content.
-    // The existing genkit flow is mainly for *generation*, not for taking arbitrary content to send.
+    setIsProcessing(true);
     
-    // Simulate a short delay for "sending"
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Simulate sending email. In a real app, this might call a different backend.
+    // For this demo, we'll use the result from AI generation or user edits.
+    // The AI flow already logs its attempt if called.
+    
+    // For this prototype, the `sendInvoiceEmail` Genkit flow is more about content generation and initial simulation logging.
+    // We can re-call it to log the "final send attempt" or just proceed to confirmation with user-edited content.
+    // Let's re-call to log this specific attempt.
+    try {
+      // Re-call the flow to log the attempt with potentially modified content,
+      // though the flow itself will re-generate based on its original prompt logic.
+      // This is a simplification for the prototype.
+      // A more robust solution might have separate flows for generation and actual sending.
+      await sendInvoiceEmail({
+        invoiceId: invoiceData.id,
+        recipientEmail: form.getValues("recipientEmail"),
+        customerName: invoiceData.customerName,
+        invoiceNumber: invoiceData.invoiceNumber,
+        // We are not passing editableSubject/Body back to this specific genkit flow,
+        // as its prompt is designed for generation, not for taking arbitrary content to "send".
+        // The UI confirmation will use the editable fields.
+      });
 
-    toast({ 
-      title: "Email Sent (Simulated)", 
-      description: `Subject: "${editableSubject}". Email to ${form.getValues("recipientEmail")} for invoice ${invoiceData.invoiceNumber} has been simulated.`
-    });
-    setStep('sent_confirmation');
-    setIsSending(false);
+      toast({ 
+        title: "Email Sent (Simulated)", 
+        description: `Subject: "${editableSubject}". Email to ${form.getValues("recipientEmail")} for invoice ${invoiceData.invoiceNumber} (with PDF) has been simulated.`
+      });
+      setStep('sent_confirmation');
+    } catch (error: any) {
+        console.error("Error during final send simulation:", error);
+        toast({ title: "Error Simulating Send", description: error.message || "Failed to simulate sending the email.", variant: "destructive" });
+    } finally {
+        setIsProcessing(false);
+    }
   };
 
   if (!invoiceData) return null;
@@ -130,7 +139,7 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
         } else if (!open && step === 'sent_confirmation') {
              onOpenChange(false);
         }
-        if (open && step === 'sent_confirmation') setStep('enter_email'); // Reset to first step if re-opened
+        if (open && step === 'sent_confirmation') setStep('enter_email'); 
     }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
@@ -163,10 +172,10 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
                   )}
                 />
                 <DialogFooter className="pt-2">
-                  <DialogClose asChild><Button type="button" variant="outline" disabled={isSending}>Cancel</Button></DialogClose>
-                  <Button type="submit" disabled={isSending}>
-                    {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Generate & Preview Email
+                  <DialogClose asChild><Button type="button" variant="outline" disabled={isProcessing}>Cancel</Button></DialogClose>
+                  <Button type="submit" disabled={isProcessing}>
+                    {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Preview Email Content
                   </Button>
                 </DialogFooter>
               </form>
@@ -175,7 +184,7 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
         )}
 
         {step === 'preview_email' && (
-            <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto">
+            <div className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
                 <Alert>
                     <Mail className="h-4 w-4" />
                     <AlertTitle>Review & Edit Email Content</AlertTitle>
@@ -200,15 +209,21 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
                       id="editable-body" 
                       value={editableBody} 
                       onChange={(e) => setEditableBody(e.target.value)} 
-                      rows={10} 
+                      rows={8} 
                       placeholder="Enter email body"
                     />
                 </div>
-                 <DialogFooter className="pt-2">
-                    <Button type="button" variant="outline" onClick={() => setStep('enter_email')} disabled={isSending}>Back</Button>
-                    <Button onClick={handleSendEmail} disabled={isSending}>
-                        {isSending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-                        {isSending ? 'Sending...' : 'Confirm & Send (Simulate)'}
+                <div className="mt-3 p-2 border rounded-md bg-muted/30 text-xs">
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                        <Paperclip className="h-4 w-4" />
+                        <span>Attachment: Invoice {invoiceData.invoiceNumber}.pdf (Simulated)</span>
+                    </div>
+                </div>
+                 <DialogFooter className="pt-4">
+                    <Button type="button" variant="outline" onClick={() => setStep('enter_email')} disabled={isProcessing}>Back</Button>
+                    <Button onClick={handleSendEmail} disabled={isProcessing}>
+                        {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
+                        {isProcessing ? 'Sending...' : 'Confirm & Send (Simulate)'}
                     </Button>
                 </DialogFooter>
             </div>
@@ -216,15 +231,16 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
         
         {step === 'sent_confirmation' && (
             <div className="space-y-4 py-2">
-                <Alert variant="default" className="border-green-500">
-                    <CheckCircleIcon className="h-5 w-5 text-green-600" />
-                    <AlertTitle className="text-green-700">Email Sent Successfully (Simulated)!</AlertTitle>
-                    <AlertDescription>
-                        The following email content was notionally sent to {form.getValues("recipientEmail")}:
+                <Alert variant="default" className="border-green-500 text-green-700 dark:border-green-600 dark:text-green-300">
+                    <CheckCircleIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <AlertTitle className="text-green-700 dark:text-green-300">Email Sent Successfully (Simulated)!</AlertTitle>
+                    <AlertDescription className="text-green-600 dark:text-green-400">
+                        The following email content (with Invoice {invoiceData.invoiceNumber}.pdf notionally attached) was simulated as sent to {form.getValues("recipientEmail")}:
                     </AlertDescription>
                 </Alert>
                  <div className="p-3 border rounded-md bg-muted/30 text-sm space-y-1 max-h-[40vh] overflow-y-auto">
                     <p><strong>Subject:</strong> {editableSubject}</p>
+                    <hr className="my-1"/>
                     <p className="whitespace-pre-wrap"><strong>Body:</strong> {editableBody}</p>
                  </div>
                 <DialogFooter className="pt-2">
