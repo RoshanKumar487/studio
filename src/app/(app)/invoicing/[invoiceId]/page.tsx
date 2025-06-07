@@ -57,7 +57,9 @@ export default function InvoiceDetailPage() {
       }
     };
 
-    fetchEmployee();
+    if (invoice !== undefined) { // Only fetch if invoice has been attempted to be loaded
+        fetchEmployee();
+    }
   }, [invoice, getEmployeeById, toast]);
 
   const handlePrint = () => {
@@ -124,7 +126,8 @@ export default function InvoiceDetailPage() {
           <div className="flex justify-between items-start">
             <div>
               <AppLogo />
-              <p className="text-sm text-muted-foreground mt-1">Your Company Name/Address Here</p>
+              <p className="text-lg font-semibold mt-2">{invoice.companyName}</p>
+              {invoice.companyAddress && <p className="text-sm text-muted-foreground whitespace-pre-line">{invoice.companyAddress}</p>}
             </div>
             <div className="text-right">
               <h1 className="text-3xl font-bold text-primary font-headline tracking-tight">{invoice.invoiceNumber}</h1>
@@ -230,4 +233,3 @@ export default function InvoiceDetailPage() {
     </div>
   );
 }
-

@@ -152,7 +152,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
   
   const getEmployeeById = useCallback(async (employeeId: string): Promise<Employee | undefined> => {
-    setLoadingEmployees(true); 
+    // setLoadingEmployees(true); // This line caused the "setstate in render" error. Moved data fetching to useEffect in consuming components.
     try {
       const response = await fetch(`/api/employees/${employeeId}`);
       if (!response.ok) {
@@ -177,7 +177,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       console.error(`Error fetching employee ${employeeId} from API:`, error);
       throw error;
     } finally {
-       setLoadingEmployees(false); 
+      // setLoadingEmployees(false); // Corresponding setLoadingEmployees set to false
     }
   }, []);
 

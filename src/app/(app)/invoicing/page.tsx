@@ -19,6 +19,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { FileSpreadsheet, PlusCircle, Trash2, Eye } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format, addDays } from 'date-fns';
+import { Separator } from '@/components/ui/separator';
 
 const lineItemSchema = z.object({
   id: z.string().optional(), 
@@ -29,6 +30,8 @@ const lineItemSchema = z.object({
 });
 
 const invoiceSchema = z.object({
+  companyName: z.string().min(1, "Your company name is required"),
+  companyAddress: z.string().optional(),
   employeeId: z.string().optional(),
   customerName: z.string().min(1, "Customer name is required"),
   customerAddress: z.string().optional(),
@@ -50,6 +53,8 @@ export default function InvoicingPage() {
   const form = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
+      companyName: 'My Awesome Company LLC', // Default company name
+      companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321', // Default company address
       customerName: '',
       customerAddress: '',
       invoiceDate: new Date(),
@@ -83,6 +88,8 @@ export default function InvoicingPage() {
       description: `Invoice ${newInvoice.invoiceNumber} for ${data.customerName} has been created.`,
     });
     form.reset({
+      companyName: 'My Awesome Company LLC',
+      companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321',
       customerName: '',
       customerAddress: '',
       invoiceDate: new Date(),
@@ -117,6 +124,25 @@ export default function InvoicingPage() {
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                
+                <CardTitle className="text-xl pt-2 font-headline">Your Company Details</CardTitle>
+                <FormField control={form.control} name="companyName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your Company Name</FormLabel>
+                    <FormControl><Input placeholder="e.g., Your Business LLC" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="companyAddress" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your Company Address (Optional)</FormLabel>
+                    <FormControl><Textarea placeholder="e.g., 456 Biz St, Your City, State" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+
+                <Separator className="my-6" />
+                <CardTitle className="text-xl font-headline">Customer Details</CardTitle>
                 <div className="grid md:grid-cols-2 gap-4">
                   <FormField control={form.control} name="customerName" render={({ field }) => (
                     <FormItem>
@@ -127,7 +153,7 @@ export default function InvoicingPage() {
                   )} />
                   <FormField control={form.control} name="employeeId" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Link to Employee (Optional)</FormLabel>
+                    <FormLabel>Link to Service Employee (Optional)</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || ""} >
                       <FormControl><SelectTrigger><SelectValue placeholder="Select an employee" /></SelectTrigger></FormControl>
                       <SelectContent>
@@ -154,6 +180,7 @@ export default function InvoicingPage() {
                   )} />
                 </div>
 
+                <Separator className="my-6" />
                 <CardTitle className="text-xl pt-4 font-headline">Line Items</CardTitle>
                 {fields.map((item, index) => (
                   <div key={item.id} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 items-end p-3 border rounded-md">
@@ -207,6 +234,8 @@ export default function InvoicingPage() {
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Line Item
                 </Button>
                 
+                <Separator className="my-6" />
+                <CardTitle className="text-xl pt-4 font-headline">Totals & Status</CardTitle>
                 <div className="grid md:grid-cols-2 gap-4 pt-4">
                     <FormField control={form.control} name="taxRate" render={({ field }) => (
                         <FormItem>
@@ -246,7 +275,7 @@ export default function InvoicingPage() {
                   </FormItem>
                 )} />
 
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 pt-4">
                     <Button type="button" variant="outline" onClick={() => { setIsInvoiceFormOpen(false); form.reset(); }}>Cancel</Button>
                     <Button type="submit">Create Invoice</Button>
                 </div>
@@ -309,5 +338,3 @@ export default function InvoicingPage() {
     </div>
   );
 }
-
-    

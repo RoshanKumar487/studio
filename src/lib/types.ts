@@ -46,6 +46,8 @@ export interface InvoiceLineItem {
 export interface Invoice {
   id: string;
   invoiceNumber: string;
+  companyName: string; // Name of the company sending the invoice
+  companyAddress?: string; // Address of the company sending the invoice
   employeeId?: string; // Can be linked to an employee
   customerName: string; // Name of the company/client being invoiced
   customerAddress?: string;
