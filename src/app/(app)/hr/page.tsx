@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,7 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from '@/components/shared/date-picker';
-import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning, Loader2, Camera, XCircle, VideoOff, Paperclip } from 'lucide-react';
+import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning, Loader2, Camera, XCircle, VideoOff, Paperclip, Printer, Search as SearchIcon } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -64,6 +64,10 @@ export default function HrPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [employeesForReport, setEmployeesForReport] = useState<Employee[] | null>(null);
+  const [reportTitle, setReportTitle] = useState<string>("");
+
 
   const employeeForm = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
@@ -81,6 +85,21 @@ export default function HrPage() {
       stopCameraStream();
     };
   }, [imagePreviewUrl]);
+
+  useEffect(() => {
+    if (employeesForReport) { 
+      if (employeesForReport.length >= 0) { 
+        const timer = setTimeout(() => {
+          window.print();
+          setEmployeesForReport(null); 
+          setReportTitle("");
+        }, 250); 
+        return () => clearTimeout(timer);
+      }
+      setEmployeesForReport(null); 
+      setReportTitle("");
+    }
+  }, [employeesForReport]);
 
   const stopCameraStream = () => {
     if (videoRef.current && videoRef.current.srcObject) {
@@ -192,16 +211,7 @@ export default function HrPage() {
         await addEmployeeDocument(selectedEmployee.id, documentData as Omit<EmployeeDocument, 'id' | 'uploadedAt'>);
         toast({ title: "Document Record Added", description: `Document '${data.name}' added for ${selectedEmployee.name}.` });
         
-        // Reset form and file states
-        documentForm.reset({ name: '', description: '' });
-        setSelectedFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        if (imagePreviewUrl) {
-            URL.revokeObjectURL(imagePreviewUrl);
-            setImagePreviewUrl(null);
-        }
-        setIsCameraMode(false);
-        stopCameraStream();
+        resetDocumentFormAndStates();
         
         const updatedEmployee = await getEmployeeById(selectedEmployee.id); 
         setSelectedEmployee(updatedEmployee || null);
@@ -302,88 +312,127 @@ export default function HrPage() {
     if (amount === null || amount === undefined) return 'N/A';
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
+
+  const filteredEmployees = useMemo(() => {
+    if (!searchTerm.trim()) {
+      return employees; // Assumes employees are already sorted if needed, or sort here
+    }
+    return employees.filter(employee =>
+      employee.name.toLowerCase().includes(searchTerm.toLowerCase().trim())
+    );
+  }, [employees, searchTerm]);
+
+  const handleGenerateAndPrintReport = () => {
+    const reportData = filteredEmployees; // Use currently filtered employees for the report
+    if (reportData.length === 0 && searchTerm.trim() !== "") {
+      toast({ title: "No Employees Found", description: "No employees match your current search term for the report.", variant: "default" });
+      setEmployeesForReport([]); // Set to empty to trigger print and show "No employees found"
+    } else if (reportData.length === 0 && searchTerm.trim() === "") {
+       toast({ title: "No Employees", description: "There are no employees to generate a report for.", variant: "default" });
+       setEmployeesForReport([]);
+    } else {
+      setEmployeesForReport(reportData);
+    }
+    setReportTitle(`Employee List Report${searchTerm.trim() ? ` (Filtered: "${searchTerm.trim()}")` : ""}`);
+  };
   
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center no-print-section">
         <h1 className="text-3xl font-bold font-headline tracking-tight flex items-center">
           <Users className="mr-3 h-8 w-8 text-primary" /> HR & Employee Management
         </h1>
-        <Dialog open={isEmployeeFormOpen} onOpenChange={setIsEmployeeFormOpen}>
-          <DialogTrigger asChild>
-            <Button><PlusCircle className="mr-2 h-5 w-5" /> Add Employee Manually</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader><DialogTitle className="font-headline">New Employee</DialogTitle></DialogHeader>
-            <Form {...employeeForm}>
-              <form onSubmit={employeeForm.handleSubmit(onEmployeeSubmit)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
-                <FormField control={employeeForm.control} name="name" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Full Name <span className="text-destructive">*</span></FormLabel>
-                    <FormControl><Input placeholder="e.g., Jane Doe" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={employeeForm.control} name="email" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl><Input type="email" placeholder="e.g., jane.doe@example.com" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={employeeForm.control} name="jobTitle" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Job Title</FormLabel>
-                    <FormControl><Input placeholder="e.g., Software Engineer" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                 <FormField control={employeeForm.control} name="startDate" render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Start Date</FormLabel>
-                    <DatePicker date={field.value || undefined} setDate={field.onChange} />
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={employeeForm.control} name="employmentType" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Employment Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""} >
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select employment type" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {employmentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                 <FormField control={employeeForm.control} name="actualSalary" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Actual Monthly Salary (USD)</FormLabel>
-                    <FormControl><Input type="number" step="0.01" placeholder="e.g., 5000" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value))} value={field.value ?? ""} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <DialogFooter className="pt-4">
-                  <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
-                  <Button type="submit">Add Employee</Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+            <Dialog open={isEmployeeFormOpen} onOpenChange={setIsEmployeeFormOpen}>
+            <DialogTrigger asChild>
+                <Button><PlusCircle className="mr-2 h-5 w-5" /> Add Employee Manually</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader><DialogTitle className="font-headline">New Employee</DialogTitle></DialogHeader>
+                <Form {...employeeForm}>
+                <form onSubmit={employeeForm.handleSubmit(onEmployeeSubmit)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
+                    <FormField control={employeeForm.control} name="name" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Full Name <span className="text-destructive">*</span></FormLabel>
+                        <FormControl><Input placeholder="e.g., Jane Doe" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )} />
+                    <FormField control={employeeForm.control} name="email" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl><Input type="email" placeholder="e.g., jane.doe@example.com" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )} />
+                    <FormField control={employeeForm.control} name="jobTitle" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Job Title</FormLabel>
+                        <FormControl><Input placeholder="e.g., Software Engineer" {...field} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )} />
+                    <FormField control={employeeForm.control} name="startDate" render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                        <FormLabel>Start Date</FormLabel>
+                        <DatePicker date={field.value || undefined} setDate={field.onChange} />
+                        <FormMessage />
+                    </FormItem>
+                    )} />
+                    <FormField control={employeeForm.control} name="employmentType" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Employment Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""} >
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select employment type" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                            {employmentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
+                        </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                    )} />
+                    <FormField control={employeeForm.control} name="actualSalary" render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Actual Monthly Salary (USD)</FormLabel>
+                        <FormControl><Input type="number" step="0.01" placeholder="e.g., 5000" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value))} value={field.value ?? ""} /></FormControl>
+                        <FormMessage />
+                    </FormItem>
+                    )} />
+                    <DialogFooter className="pt-4">
+                    <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+                    <Button type="submit">Add Employee</Button>
+                    </DialogFooter>
+                </form>
+                </Form>
+            </DialogContent>
+            </Dialog>
+            <Button variant="outline" size="icon" onClick={handleGenerateAndPrintReport} disabled={loadingEmployees} aria-label="Print Employee Report">
+                <Printer className="h-5 w-5" />
+            </Button>
+        </div>
       </div>
 
-      <Card className="shadow-lg">
+      <Card className="shadow-lg no-print-section">
         <CardHeader>
           <CardTitle className="font-headline">Employee List</CardTitle>
+          <div className="relative mt-2">
+            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Search employees by name..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 max-w-sm"
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {loadingEmployees && <div className="flex justify-center py-4"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <span className="ml-2">Loading employees...</span></div>}
-          {!loadingEmployees && employees.length === 0 && (
-            <p className="text-muted-foreground text-center py-4">No employees added yet.</p>
+          {!loadingEmployees && filteredEmployees.length === 0 && (
+            <p className="text-muted-foreground text-center py-4">
+              {searchTerm ? "No employees match your search." : "No employees added yet."}
+            </p>
           )}
-          {!loadingEmployees && employees.length > 0 && (
+          {!loadingEmployees && filteredEmployees.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -396,7 +445,7 @@ export default function HrPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employees.map((employee) => (
+                {filteredEmployees.map((employee) => (
                   <TableRow key={employee.id}>
                     <TableCell className="font-medium">{employee.name}</TableCell>
                     <TableCell>{employee.jobTitle || 'N/A'}</TableCell>
@@ -478,7 +527,7 @@ export default function HrPage() {
                                 <div className="flex gap-1 shrink-0">
                                   {imagePreviewUrl && (
                                     <DialogTrigger asChild>
-                                      <Button type="button" variant="ghost" size="sm" onClick={() => {/* Placeholder: Open a modal for this preview if needed */}} className="text-xs h-auto py-1 px-2">
+                                      <Button type="button" variant="ghost" size="sm" onClick={() => {/* Placeholder */}} className="text-xs h-auto py-1 px-2">
                                         <Eye className="mr-1 h-3.5 w-3.5" /> View
                                       </Button>
                                     </DialogTrigger>
@@ -673,6 +722,97 @@ export default function HrPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Printable Employee Report Section */}
+      {employeesForReport && (
+        <div id="employee-report-section" className="printable-report-area">
+          <h2 className="text-2xl font-bold mb-2">{reportTitle}</h2>
+          {employeesForReport.length > 0 ? (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Job Title</TableHead>
+                    <TableHead>Start Date</TableHead>
+                    <TableHead>Employment Type</TableHead>
+                    <TableHead className="text-right">Monthly Salary</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employeesForReport.map((employee) => (
+                    <TableRow key={employee.id}>
+                      <TableCell>{employee.name}</TableCell>
+                      <TableCell>{employee.jobTitle || 'N/A'}</TableCell>
+                      <TableCell>{employee.startDate ? format(new Date(employee.startDate), "PPP") : 'N/A'}</TableCell>
+                      <TableCell>{employee.employmentType || 'N/A'}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(employee.actualSalary)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
+          ) : (
+            <p>No employees found for this report.</p>
+          )}
+          <p className="text-xs text-muted-foreground mt-4" style={{fontSize: "0.75rem", color: "hsl(var(--muted-foreground))", marginTop: "1rem"}}>
+            Generated on: {format(new Date(), "PPP p")}
+          </p>
+        </div>
+      )}
+
+      <style jsx global>{`
+        .printable-report-area {
+          display: none; 
+        }
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          .no-print-section, .no-print-section * {
+              display: none !important;
+              visibility: hidden !important;
+          }
+          #employee-report-section, #employee-report-section * {
+            visibility: visible !important;
+          }
+          #employee-report-section {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            padding: 20px !important;
+            font-size: 10pt !important;
+            background-color: white !important;
+          }
+          #employee-report-section h2 {
+            font-size: 16pt !important;
+            margin-bottom: 10px !important;
+          }
+          #employee-report-section table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            margin-top: 10px !important;
+          }
+          #employee-report-section th, #employee-report-section td {
+            border: 1px solid #ccc !important;
+            padding: 5px !important;
+            text-align: left !important;
+            color: #000 !important;
+          }
+          #employee-report-section th {
+            background-color: #f0f0f0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            font-weight: bold !important;
+          }
+          #employee-report-section .text-right {
+              text-align: right !important;
+          }
+          #employee-report-section .text-muted-foreground {
+              color: #555 !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
