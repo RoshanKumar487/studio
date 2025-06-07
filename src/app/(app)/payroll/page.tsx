@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CalendarDays, DollarSign, UserCheck, UserX, ClipboardUser, Loader2, Info } from 'lucide-react';
+import { CalendarDays, DollarSign, UserCheck, UserX, ClipboardList, Loader2, Info } from 'lucide-react';
 import { format, getDaysInMonth as fnGetDaysInMonth, startOfMonth, eachDayOfInterval, endOfMonth, isSameDay } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 
@@ -80,7 +80,7 @@ export default function PayrollPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <ClipboardUser className="h-8 w-8 text-primary" />
+        <ClipboardList className="h-8 w-8 text-primary" />
         <h1 className="text-3xl font-bold font-headline tracking-tight">Employee Payroll</h1>
       </div>
       <CardDescription>

@@ -20,7 +20,7 @@ import {
 import { AppLogo } from '@/components/shared/app-logo';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LayoutDashboard, TrendingUp, TrendingDown, Sparkles, Users, FileSpreadsheet, PanelLeft, ClipboardUser } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, TrendingDown, Sparkles, Users, FileSpreadsheet, PanelLeft, ClipboardList } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -28,7 +28,7 @@ const navItems = [
   { href: '/expenses', label: 'Expenses', icon: TrendingDown },
   { href: '/hr', label: 'HR & Employees', icon: Users },
   { href: '/invoicing', label: 'Invoicing', icon: FileSpreadsheet },
-  { href: '/payroll', label: 'Payroll', icon: ClipboardUser },
+  { href: '/payroll', label: 'Payroll', icon: ClipboardList },
   { href: '/ai-assistant', label: 'AI Assistant', icon: Sparkles },
 ];
 
