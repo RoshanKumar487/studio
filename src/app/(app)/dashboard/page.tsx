@@ -1,46 +1,51 @@
 
 "use client";
 
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppData } from "@/context/app-data-context";
-import { DollarSign, TrendingUp, TrendingDown, CalendarClock, Users, Building } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, CalendarClock, Users, Building, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { format, subDays, eachDayOfInterval } from 'date-fns';
 
 export default function DashboardPage() {
-  const { totalRevenue, totalExpenses, netProfit, revenueEntries, expenseEntries, appointments, employees, invoices } = useAppData();
+  const { totalRevenue, totalExpenses, netProfit, revenueEntries, expenseEntries, appointments, employees, invoices, loadingEmployees } = useAppData();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
   // Data for charts - last 30 days
-  const last30Days = eachDayOfInterval({ start: subDays(new Date(), 29), end: new Date() });
+  const last30Days = useMemo(() => eachDayOfInterval({ start: subDays(new Date(), 29), end: new Date() }), []);
   
-  const dailyChartData = last30Days.map(day => {
-    const formattedDate = format(day, 'MMM d');
-    const dailyRevenue = revenueEntries
-      .filter(entry => format(entry.date, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'))
-      .reduce((sum, entry) => sum + entry.amount, 0);
-    const dailyExpenses = expenseEntries
-      .filter(entry => format(entry.date, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'))
-      .reduce((sum, entry) => sum + entry.amount, 0);
-    return {
-      date: formattedDate,
-      revenue: dailyRevenue,
-      expenses: dailyExpenses,
-      profit: dailyRevenue - dailyExpenses,
-    };
-  });
+  const dailyChartData = useMemo(() => {
+    return last30Days.map(day => {
+      const formattedDate = format(day, 'MMM d');
+      const dailyRevenue = revenueEntries
+        .filter(entry => format(entry.date, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'))
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      const dailyExpenses = expenseEntries
+        .filter(entry => format(entry.date, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'))
+        .reduce((sum, entry) => sum + entry.amount, 0);
+      return {
+        date: formattedDate,
+        revenue: dailyRevenue,
+        expenses: dailyExpenses,
+        profit: dailyRevenue - dailyExpenses,
+      };
+    });
+  }, [last30Days, revenueEntries, expenseEntries]);
 
-  const upcomingAppointments = appointments
-    .filter(app => app.date >= new Date())
-    .sort((a,b) => a.date.getTime() - b.date.getTime())
-    .slice(0, 5);
+  const upcomingAppointments = useMemo(() => {
+    return appointments
+      .filter(app => app.date >= new Date())
+      .sort((a,b) => a.date.getTime() - b.date.getTime())
+      .slice(0, 5);
+  }, [appointments]);
 
-  const employeeCount = employees.length;
-  const uniqueCustomerNames = new Set(invoices.map(inv => inv.customerName));
-  const uniqueCustomerCount = uniqueCustomerNames.size;
+  const employeeCount = useMemo(() => employees.length, [employees]);
+  const uniqueCustomerNames = useMemo(() => new Set(invoices.map(inv => inv.customerName)), [invoices]);
+  const uniqueCustomerCount = useMemo(() => uniqueCustomerNames.size, [uniqueCustomerNames]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -85,7 +90,13 @@ export default function DashboardPage() {
             <Users className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{employeeCount}</div>
+            {loadingEmployees ? (
+              <div className="flex items-center text-2xl font-bold">
+                <Loader2 className="mr-2 h-6 w-6 animate-spin" /> Loading...
+              </div>
+            ) : (
+              <div className="text-2xl font-bold">{employeeCount}</div>
+            )}
             <p className="text-xs text-muted-foreground">Active team members</p>
           </CardContent>
         </Card>
@@ -142,7 +153,8 @@ export default function DashboardPage() {
                         {format(app.date, "EEEE, MMM d, yyyy")} at {app.time}
                       </p>
                     </div>
-                     <Users className="h-5 w-5 text-muted-foreground" />
+                     {/* Placeholder for assigned staff, if that feature is added */}
+                     {/* <Users className="h-5 w-5 text-muted-foreground" />  */}
                   </li>
                 ))}
               </ul>
