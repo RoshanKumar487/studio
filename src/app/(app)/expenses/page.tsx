@@ -26,7 +26,7 @@ const expenseSchema = z.object({
   date: z.date({ required_error: "Date is required." }),
   amount: z.coerce.number().min(0.01, "Amount must be positive."),
   category: z.string().min(1, "Category is required.").max(50, "Category too long."),
-  description: z.string().min(1, "Description is required.").max(200, "Description too long."),
+  description: z.string().max(200, "Description too long.").optional().or(z.literal('')), // Made optional
   submittedBy: z.string().max(100, "Submitter name too long.").optional().or(z.literal('')),
 });
 
@@ -295,7 +295,7 @@ export default function ExpensesPage() {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description <span className="text-destructive">*</span></FormLabel>
+                    <FormLabel>Description</FormLabel>
                     <FormControl>
                       <Textarea placeholder="e.g., Monthly software subscription" {...field} />
                     </FormControl>
@@ -543,3 +543,5 @@ export default function ExpensesPage() {
   );
 }
 
+
+    
