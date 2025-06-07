@@ -16,16 +16,19 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { DatePicker } from '@/components/shared/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSpreadsheet, PlusCircle, Trash2, Eye } from 'lucide-react';
+import { FileSpreadsheet, PlusCircle, Trash2, Eye, Sparkles, Loader2 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { format, addDays } from 'date-fns';
+import { processInvoiceQuery, type ProcessInvoiceQueryInput, type ProcessInvoiceQueryOutput } from '@/ai/flows/process-invoice-query-flow';
+
 
 const lineItemSchema = z.object({
-  id: z.string().optional(), // For existing items during edit, or generated on client for new
+  id: z.string().optional(), 
   description: z.string().min(1, "Description is required"),
   quantity: z.coerce.number().min(0.1, "Quantity must be positive"),
   unitPrice: z.coerce.number().min(0.01, "Unit price must be positive"),
-  total: z.coerce.number().optional() // Calculated, not directly edited
+  total: z.coerce.number().optional() 
 });
 
 const invoiceSchema = z.object({
@@ -35,7 +38,7 @@ const invoiceSchema = z.object({
   invoiceDate: z.date({ required_error: "Invoice date is required."}),
   dueDate: z.date({ required_error: "Due date is required."}),
   lineItems: z.array(lineItemSchema).min(1, "At least one line item is required."),
-  taxRate: z.coerce.number().min(0).max(1).default(0), // e.g., 0.1 for 10%
+  taxRate: z.coerce.number().min(0).max(1).default(0), 
   notes: z.string().optional(),
   status: z.enum(['Draft', 'Sent', 'Paid', 'Overdue']).default('Draft'),
 });
@@ -43,9 +46,14 @@ const invoiceSchema = z.object({
 type InvoiceFormData = z.infer<typeof invoiceSchema>;
 
 export default function InvoicingPage() {
-  const { employees, invoices, addInvoice, getNextInvoiceNumber, getEmployeeById } = useAppData();
+  const { employees, invoices, addInvoice, getNextInvoiceNumber, getInvoiceById, updateInvoiceStatus } = useAppData();
   const { toast } = useToast();
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+
+  const [aiInvoiceQuery, setAiInvoiceQuery] = useState("");
+  const [isAiInvoiceLoading, setIsAiInvoiceLoading] = useState(false);
+  const [aiInvoiceResult, setAiInvoiceResult] = useState<ProcessInvoiceQueryOutput | null>(null);
+  const [queriedInvoiceDetails, setQueriedInvoiceDetails] = useState<Invoice | null>(null);
 
   const form = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
@@ -98,6 +106,47 @@ export default function InvoicingPage() {
   
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
+  const handleAiInvoiceQuery = async () => {
+    if (!aiInvoiceQuery.trim()) {
+      toast({ title: "Input Required", description: "Please provide a query for the AI.", variant: "destructive" });
+      return;
+    }
+    setIsAiInvoiceLoading(true);
+    setAiInvoiceResult(null);
+    setQueriedInvoiceDetails(null);
+    try {
+      const result = await processInvoiceQuery({ query: aiInvoiceQuery });
+      setAiInvoiceResult(result);
+
+      if (result.intent === 'get_details' && result.invoiceNumber) {
+        const foundInvoice = getInvoiceById(result.invoiceNumber);
+        if (foundInvoice) {
+          setQueriedInvoiceDetails(foundInvoice);
+          toast({ title: "Invoice Found", description: `Details for ${result.invoiceNumber} displayed.` });
+        } else {
+          toast({ title: "Not Found", description: `Invoice ${result.invoiceNumber} not found.`, variant: "destructive" });
+        }
+      } else if (result.intent === 'update_status' && result.invoiceNumber && result.newStatus) {
+        const foundInvoice = getInvoiceById(result.invoiceNumber);
+        if (foundInvoice) {
+          updateInvoiceStatus(result.invoiceNumber, result.newStatus);
+          toast({ title: "Invoice Updated", description: `Status of ${result.invoiceNumber} changed to ${result.newStatus}.` });
+        } else {
+          toast({ title: "Not Found", description: `Invoice ${result.invoiceNumber} not found for update.`, variant: "destructive" });
+        }
+      } else if (result.intent === 'unknown' || !result.invoiceNumber) {
+         toast({ title: "AI Query", description: result.message, variant: result.message.startsWith("Sorry") ? "default" : "destructive" });
+      }
+    } catch (error: any) {
+      console.error("AI Invoice Query Error:", error);
+      toast({ title: "Error", description: error.message || "Failed to process query using AI.", variant: "destructive" });
+      setAiInvoiceResult({ intent: 'unknown', message: error.message || "An unexpected error occurred." });
+    } finally {
+      setIsAiInvoiceLoading(false);
+    }
+  };
+
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-between items-center">
@@ -128,7 +177,7 @@ export default function InvoicingPage() {
                   <FormField control={form.control} name="employeeId" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Link to Employee (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value} >
+                    <Select onValueChange={field.onChange} value={field.value || ""} >
                       <FormControl><SelectTrigger><SelectValue placeholder="Select an employee" /></SelectTrigger></FormControl>
                       <SelectContent>
                         {employees.map(emp => (<SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>))}
@@ -255,6 +304,47 @@ export default function InvoicingPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card className="shadow-lg mt-6">
+        <CardHeader>
+          <CardTitle className="font-headline flex items-center gap-2"><Sparkles className="h-6 w-6 text-primary" /> AI Invoice Assistant</CardTitle>
+          <CardDescription>Ask to see invoice details or update status. E.g., "Show INV-2024-0001" or "Mark INV-2024-0001 as Paid".</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Textarea
+            placeholder="Enter your invoice query here..."
+            value={aiInvoiceQuery}
+            onChange={(e) => setAiInvoiceQuery(e.target.value)}
+            rows={3}
+          />
+          <Button onClick={handleAiInvoiceQuery} disabled={isAiInvoiceLoading}>
+            {isAiInvoiceLoading ? <Loader2 className="animate-spin" /> : <Sparkles />}
+            {isAiInvoiceLoading ? 'Processing...' : 'Process Query with AI'}
+          </Button>
+          {aiInvoiceResult && aiInvoiceResult.intent === 'unknown' && (
+            <Alert variant="default">
+              <AlertTitle>AI Response</AlertTitle>
+              <AlertDescription>{aiInvoiceResult.message}</AlertDescription>
+            </Alert>
+          )}
+          {queriedInvoiceDetails && (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle>Details for {queriedInvoiceDetails.invoiceNumber}</CardTitle>
+                <CardDescription>Status: {queriedInvoiceDetails.status}, Due: {format(queriedInvoiceDetails.dueDate, "PPP")}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p><strong>Customer:</strong> {queriedInvoiceDetails.customerName}</p>
+                <p><strong>Total:</strong> {formatCurrency(queriedInvoiceDetails.grandTotal)}</p>
+                <Link href={`/invoicing/${queriedInvoiceDetails.id}`} className="mt-2">
+                  <Button variant="outline" size="sm">View Full Invoice <Eye className="ml-2 h-4 w-4" /></Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+        </CardContent>
+      </Card>
+
 
       <Card className="shadow-lg mt-6">
         <CardHeader>

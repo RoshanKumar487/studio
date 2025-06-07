@@ -14,14 +14,6 @@ export interface ExpenseEntry {
   description:string;
 }
 
-export interface Appointment {
-  id: string;
-  date: Date; // Represents the specific day of the appointment
-  time: string; // e.g., "10:00 AM" or "14:30"
-  title: string; // Could be client name or service
-  description?: string;
-}
-
 export interface EmployeeDocument {
   id: string; // This will be the ID within the employee's documents array
   name: string;

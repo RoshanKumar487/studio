@@ -4,7 +4,7 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppData } from "@/context/app-data-context";
-import { DollarSign, TrendingUp, TrendingDown, CalendarClock, Users, Building, Loader2, PieChartIcon } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Users, Building, Loader2, PieChartIcon } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { format, subDays, eachDayOfInterval } from 'date-fns';
 
@@ -20,7 +20,7 @@ const PIE_CHART_COLORS = [
 
 
 export default function DashboardPage() {
-  const { totalRevenue, totalExpenses, netProfit, revenueEntries, expenseEntries, appointments, employees, invoices, loadingEmployees } = useAppData();
+  const { totalRevenue, totalExpenses, netProfit, revenueEntries, expenseEntries, employees, invoices, loadingEmployees } = useAppData();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -46,13 +46,6 @@ export default function DashboardPage() {
     });
   }, [last30Days, revenueEntries, expenseEntries]);
 
-  const upcomingAppointments = useMemo(() => {
-    return appointments
-      .filter(app => app.date >= new Date())
-      .sort((a,b) => a.date.getTime() - b.date.getTime())
-      .slice(0, 5);
-  }, [appointments]);
-
   const employeeCount = useMemo(() => employees.length, [employees]);
   const uniqueCustomerNames = useMemo(() => new Set(invoices.map(inv => inv.customerName)), [invoices]);
   const uniqueCustomerCount = useMemo(() => uniqueCustomerNames.size, [uniqueCustomerNames]);
@@ -64,7 +57,7 @@ export default function DashboardPage() {
     });
     return Object.entries(categoryMap)
       .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value); // Sort for consistent pie chart display
+      .sort((a, b) => b.value - a.value); 
   }, [expenseEntries]);
 
   return (
@@ -202,32 +195,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
-
-      <Card className="shadow-lg md:col-span-3"> {/* Changed to md:col-span-3 for full width */}
-           <CardHeader>
-            <CardTitle className="font-headline flex items-center">
-              <CalendarClock className="mr-2 h-5 w-5 text-primary" /> Upcoming Appointments
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {upcomingAppointments.length > 0 ? (
-              <ul className="space-y-3">
-                {upcomingAppointments.map(app => (
-                  <li key={app.id} className="flex justify-between items-center p-3 bg-muted/50 rounded-md">
-                    <div>
-                      <p className="font-semibold">{app.title}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {format(app.date, "EEEE, MMM d, yyyy")} at {app.time}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground">No upcoming appointments.</p>
-            )}
-          </CardContent>
-        </Card>
     </div>
   );
 }

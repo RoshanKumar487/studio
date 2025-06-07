@@ -1,20 +1,18 @@
 
 "use client";
 
-import type { RevenueEntry, ExpenseEntry, Appointment, Employee, EmployeeDocument, Invoice } from '@/lib/types';
+import type { RevenueEntry, ExpenseEntry, Employee, EmployeeDocument, Invoice } from '@/lib/types';
 import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AppDataContextType {
   revenueEntries: RevenueEntry[];
   expenseEntries: ExpenseEntry[];
-  appointments: Appointment[];
   employees: Employee[];
   invoices: Invoice[];
 
   addRevenueEntry: (entry: Omit<RevenueEntry, 'id' | 'date'> & { date: string | Date }) => void;
   addExpenseEntry: (entry: Omit<ExpenseEntry, 'id' | 'date'> & { date: string | Date }) => void;
-  addAppointment: (entry: Omit<Appointment, 'id' | 'date'> & { date: string | Date }) => void;
   
   addEmployee: (employeeData: Omit<Employee, 'id' | 'documents'>) => Promise<Employee | null>;
   addEmployeeDocument: (employeeId: string, documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'>) => Promise<Employee | null>;
@@ -44,17 +42,13 @@ const initialExpenses: ExpenseEntry[] = [
   { id: uuidv4(), date: new Date(2024, 6, 10), amount: 250, category: "Utilities", description: "Office electricity bill" },
   { id: uuidv4(), date: new Date(2024, 6, 12), amount: 65, category: "Office Supplies", description: "Stationery purchase" },
 ];
-const initialAppointments: Appointment[] = [
-   { id: uuidv4(), date: new Date(new Date().setDate(new Date().getDate() + 2)), time: "10:00", title: "Client Meeting - John Doe" },
-   { id: uuidv4(), date: new Date(new Date().setDate(new Date().getDate() + 3)), time: "14:30", title: "Project Sync - Team Alpha" },
-];
+
 const initialInvoices: Invoice[] = [];
 
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [revenueEntries, setRevenueEntries] = useState<RevenueEntry[]>(initialRevenue);
   const [expenseEntries, setExpenseEntries] = useState<ExpenseEntry[]>(initialExpenses);
-  const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
   
   const [employees, setEmployees] = useState<Employee[]>([]); 
   const [loadingEmployees, setLoadingEmployees] = useState<boolean>(true);
@@ -67,17 +61,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       try {
         const response = await fetch('/api/employees');
         if (!response.ok) {
-          let errorMessage = 'Failed to fetch employees';
+          let errorMessage = `Failed to fetch employees`;
           try {
             const errorData = await response.json();
             if (errorData && errorData.message) {
-              errorMessage += `: ${errorData.message} (Status: ${response.status})`;
-            } else {
-              errorMessage += ` (Status: ${response.status})`;
+              errorMessage += `: ${errorData.message}`;
             }
-          } catch (e) {
-            errorMessage += ` (Status: ${response.status})`;
-          }
+          } catch (e) { /* ignore, use base message */ }
+          errorMessage += ` (Status: ${response.status})`;
           throw new Error(errorMessage);
         }
         const data: Employee[] = await response.json();
@@ -89,6 +80,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setEmployees(employeesWithEnsuredDocuments.sort((a, b) => a.name.localeCompare(b.name)));
       } catch (error) {
         console.error("Error fetching employees from API:", error);
+         // Keep existing employees or set to empty if preferred, instead of nulling out.
+         // setEmployees([]); // Option: clear employees on error
       } finally {
         setLoadingEmployees(false);
       }
@@ -115,15 +108,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setExpenseEntries(prev => [...prev, newEntry].sort((a, b) => b.date.getTime() - a.date.getTime()));
   }, []);
 
-  const addAppointment = useCallback((entry: Omit<Appointment, 'id' | 'date'> & { date: string | Date }) => {
-    const newAppointment: Appointment = {
-      ...entry,
-      id: uuidv4(),
-      date: typeof entry.date === 'string' ? new Date(entry.date) : entry.date,
-    };
-    setAppointments(prev => [...prev, newAppointment].sort((a,b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time)));
-  }, []);
-
   const addEmployee = useCallback(async (employeeData: Omit<Employee, 'id' | 'documents'>): Promise<Employee | null> => {
     setLoadingEmployees(true);
     try {
@@ -133,11 +117,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify(employeeData),
       });
       if (!response.ok) {
-        let errorMessage = `Failed to add employee (Status: ${response.status})`;
+        let errorMessage = `Failed to add employee`;
         try {
-          const errorData = await response.json();
-          if (errorData && errorData.message) errorMessage += `: ${errorData.message}`;
-        } catch (e) { /* Failed to parse JSON, stick with generic status */ }
+            const errorData = await response.json();
+            if (errorData && errorData.message) errorMessage += `: ${errorData.message}`;
+        } catch (e) { /* ignore */ }
+        errorMessage += ` (Status: ${response.status})`;
         throw new Error(errorMessage);
       }
       const newEmployee: Employee = await response.json();
@@ -150,7 +135,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       return processedEmployee;
     } catch (error) {
       console.error("Error adding employee via API:", error);
-      return null;
+      throw error; // Re-throw to be caught by the calling component
     } finally {
       setLoadingEmployees(false);
     }
@@ -162,11 +147,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`/api/employees/${employeeId}`);
       if (!response.ok) {
         if (response.status === 404) return undefined; 
-        let errorMessage = `Failed to fetch employee ${employeeId} (Status: ${response.status})`;
+        let errorMessage = `Failed to fetch employee ${employeeId}`;
          try {
           const errorData = await response.json();
           if (errorData && errorData.message) errorMessage += `: ${errorData.message}`;
         } catch (e) { /* Failed to parse JSON */ }
+        errorMessage += ` (Status: ${response.status})`;
         throw new Error(errorMessage);
       }
       const employee: Employee = await response.json();
@@ -178,7 +164,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       return processedEmployee;
     } catch (error) {
       console.error(`Error fetching employee ${employeeId} from API:`, error);
-      return undefined;
+      throw error;
     } finally {
        setLoadingEmployees(false); 
     }
@@ -196,8 +182,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     try {
       const currentEmployeeResponse = await fetch(`/api/employees/${employeeId}`);
       if (!currentEmployeeResponse.ok) {
-        let errorMessage = `Failed to fetch employee before adding document (Status: ${currentEmployeeResponse.status})`;
+        let errorMessage = `Failed to fetch employee before adding document`;
         try { const errorData = await currentEmployeeResponse.json(); if (errorData && errorData.message) errorMessage += `: ${errorData.message}`; } catch (e) {}
+        errorMessage += ` (Status: ${currentEmployeeResponse.status})`;
         throw new Error(errorMessage);
       }
       const currentEmployee: Employee = await currentEmployeeResponse.json();
@@ -213,11 +200,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       });
 
       if (!response.ok) {
-        let errorMessage = `Failed to add employee document (Status: ${response.status})`;
+        let errorMessage = `Failed to add employee document`;
         try {
           const errorData = await response.json();
           if (errorData && errorData.message) errorMessage += `: ${errorData.message}`;
         } catch (e) { /* Failed to parse JSON */ }
+        errorMessage += ` (Status: ${response.status})`;
         throw new Error(errorMessage);
       }
       const updatedEmployee: Employee = await response.json();
@@ -230,7 +218,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       return processedEmployee;
     } catch (error) {
       console.error("Error adding employee document via API:", error);
-      return null;
+      throw error;
     } finally {
       setLoadingEmployees(false);
     }
@@ -241,8 +229,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     try {
       const currentEmployeeResponse = await fetch(`/api/employees/${employeeId}`);
       if (!currentEmployeeResponse.ok) {
-         let errorMessage = `Failed to fetch employee before deleting document (Status: ${currentEmployeeResponse.status})`;
+         let errorMessage = `Failed to fetch employee before deleting document`;
         try { const errorData = await currentEmployeeResponse.json(); if (errorData && errorData.message) errorMessage += `: ${errorData.message}`; } catch (e) {}
+        errorMessage += ` (Status: ${currentEmployeeResponse.status})`;
         throw new Error(errorMessage);
       }
       const currentEmployee: Employee = await currentEmployeeResponse.json();
@@ -255,11 +244,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ documents: updatedDocuments }),
       });
       if (!response.ok) {
-        let errorMessage = `Failed to delete employee document (Status: ${response.status})`;
+        let errorMessage = `Failed to delete employee document`;
         try {
           const errorData = await response.json();
           if (errorData && errorData.message) errorMessage += `: ${errorData.message}`;
         } catch (e) { /* Failed to parse JSON */ }
+        errorMessage += ` (Status: ${response.status})`;
         throw new Error(errorMessage);
       }
       const updatedEmployee: Employee = await response.json();
@@ -272,7 +262,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       return processedEmployee;
     } catch (error) {
       console.error("Error deleting employee document via API:", error);
-      return null;
+      throw error;
     } finally {
       setLoadingEmployees(false);
     }
@@ -306,7 +296,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     };
     setInvoices(prev => [...prev, newInvoice].sort((a, b) => b.invoiceDate.getTime() - a.invoiceDate.getTime()));
     return newInvoice;
-  }, [getNextInvoiceNumber, invoices]); 
+  }, [getNextInvoiceNumber]); 
 
   const updateInvoiceStatus = useCallback((invoiceId: string, status: Invoice['status']) => {
     setInvoices(prevInvoices => 
@@ -330,12 +320,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     <AppDataContext.Provider value={{ 
       revenueEntries, 
       expenseEntries, 
-      appointments, 
       employees, 
       invoices,
       addRevenueEntry, 
       addExpenseEntry,
-      addAppointment,
       addEmployee, 
       addEmployeeDocument, 
       deleteEmployeeDocument, 
