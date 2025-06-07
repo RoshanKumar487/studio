@@ -90,6 +90,8 @@ export default function InvoicingPage() {
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [filterCustomerName, setFilterCustomerName] = useState<string>("");
 
+  const [isCustomHeaderInputVisible, setIsCustomHeaderInputVisible] = useState(false);
+
   const form = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: defaultFormValues,
@@ -113,6 +115,14 @@ export default function InvoicingPage() {
       setServiceProviderSearchText(watchedServiceProviderName || "");
     }
   }, [watchedEmployeeId, watchedServiceProviderName, employees]);
+  
+  useEffect(() => {
+    // Show input if header has value (e.g. when editing or if previously set)
+    if (watchedCustomColumnHeader) {
+      setIsCustomHeaderInputVisible(true);
+    }
+  }, [watchedCustomColumnHeader]);
+
 
   const handleOpenEditForm = (invoiceId: string) => {
     const invoiceToEdit = getInvoiceById(invoiceId);
@@ -134,6 +144,11 @@ export default function InvoicingPage() {
       } else {
           setServiceProviderSearchText(invoiceToEdit.serviceProviderName || "");
       }
+      if (invoiceToEdit.customColumnHeader) {
+        setIsCustomHeaderInputVisible(true);
+      } else {
+        setIsCustomHeaderInputVisible(false);
+      }
       setIsInvoiceFormOpen(true);
     } else {
       toast({ title: "Error", description: "Could not find invoice to edit.", variant: "destructive" });
@@ -145,6 +160,7 @@ export default function InvoicingPage() {
     setServiceProviderSearchText(""); 
     setEditingInvoiceId(null);
     setIsInvoiceFormOpen(false);
+    setIsCustomHeaderInputVisible(false);
   };
 
   const onSubmit: SubmitHandler<InvoiceFormData> = async (data) => {
@@ -429,13 +445,49 @@ export default function InvoicingPage() {
 
                 <Separator className="my-6" />
                 <CardTitle className="text-xl pt-4 font-headline">Line Items</CardTitle>
-                <FormField control={form.control} name="customColumnHeader" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Custom Column Header (Optional)</FormLabel>
-                    <FormControl><Input placeholder="e.g., Notes, Part No." {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+                
+                {(!isCustomHeaderInputVisible && !watchedCustomColumnHeader) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsCustomHeaderInputVisible(true)}
+                    className="mb-2"
+                  >
+                    <PlusCircle className="mr-2 h-4 w-4" /> Add Custom Column Header
+                  </Button>
+                ) : (
+                  <div className="mb-4">
+                    <FormField
+                      control={form.control}
+                      name="customColumnHeader"
+                      render={({ field }) => (
+                        <FormItem>
+                          <div className="flex items-center justify-between mb-1">
+                            <FormLabel>Custom Column Header</FormLabel>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs h-auto py-1 px-1.5"
+                              onClick={() => {
+                                form.setValue("customColumnHeader", "");
+                                setIsCustomHeaderInputVisible(false);
+                              }}
+                            >
+                              <Trash2 className="mr-1 h-3.5 w-3.5 text-destructive" /> Remove Header
+                            </Button>
+                          </div>
+                          <FormControl>
+                            <Input placeholder="e.g., Notes, Part No." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+
                 {fields.map((item, index) => (
                   <div key={item.id} className={`grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr${watchedCustomColumnHeader ? '_1fr' : ''}_auto] gap-2 items-end p-3 border rounded-md`}>
                     <FormField control={form.control} name={`lineItems.${index}.description`} render={({ field }) => (
