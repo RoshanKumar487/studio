@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ArrowUpDown, PlusCircle, Paperclip, Camera, Loader2, VideoOff, XCircle, FileWarning, Download, Image as ImageIcon, Eye } from 'lucide-react';
+import { ArrowUpDown, PlusCircle, Paperclip, Camera, Loader2, VideoOff, XCircle, FileWarning, Download, Image as ImageIcon, Eye, FileText, InfoIcon } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import NextImage from 'next/image';
@@ -28,8 +28,6 @@ const expenseSchema = z.object({
   category: z.string().min(1, "Category is required.").max(50, "Category too long."),
   description: z.string().min(1, "Description is required.").max(200, "Description too long."),
   submittedBy: z.string().max(100, "Submitter name too long.").optional().or(z.literal('')),
-  // Document fields are not directly in schema as file object is handled separately
-  // but their metadata will be passed to addExpenseEntry
 });
 
 type ExpenseFormData = z.infer<typeof expenseSchema>;
@@ -38,6 +36,8 @@ type SortKey = keyof ExpenseEntry | '';
 type SortDirection = 'asc' | 'desc';
 
 const expenseCategories = ["Software", "Marketing", "Utilities", "Office Supplies", "Travel", "Meals", "Hardware", "Consulting", "Other"];
+
+type HistoryAttachmentInfo = Pick<ExpenseEntry, 'documentFileName' | 'documentFileType' | 'documentFileSize'>;
 
 export default function ExpensesPage() {
   const { expenseEntries, addExpenseEntry } = useAppData();
@@ -53,7 +53,10 @@ export default function ExpensesPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [isViewAttachmentDialogOpen, setIsViewAttachmentDialogOpen] = useState(false);
+  const [historyAttachmentToView, setHistoryAttachmentToView] = useState<HistoryAttachmentInfo | null>(null);
+  const [isHistoryAttachmentDialogValidOpen, setIsHistoryAttachmentDialogValidOpen] = useState(false);
 
 
   const form = useForm<ExpenseFormData>({
@@ -170,7 +173,7 @@ export default function ExpensesPage() {
     form.reset({ date: new Date(), amount: 0, category: '', description: '', submittedBy: '' });
     setSelectedFile(null);
     setImagePreviewUrl(null);
-    if (fileInputRef.current) fileInputRef.current.value = ""; // Reset file input
+    if (fileInputRef.current) fileInputRef.current.value = ""; 
     setIsCameraMode(false);
     stopCameraStream();
   };
@@ -207,12 +210,23 @@ export default function ExpensesPage() {
 
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   const formatFileSize = (bytes?: number): string => {
-    if (bytes === undefined || bytes === null) return "N/A";
+    if (bytes === undefined || bytes === null || isNaN(bytes)) return "N/A";
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const handleViewHistoryAttachment = (entry: ExpenseEntry) => {
+    if (entry.documentFileName) {
+      setHistoryAttachmentToView({
+        documentFileName: entry.documentFileName,
+        documentFileType: entry.documentFileType,
+        documentFileSize: entry.documentFileSize,
+      });
+      setIsHistoryAttachmentDialogValidOpen(true);
+    }
   };
 
 
@@ -303,12 +317,11 @@ export default function ExpensesPage() {
                 )}
               />
 
-              {/* Document Upload Section */}
               <FormItem>
                 <FormLabel>Attach Receipt/Document (Optional)</FormLabel>
                 {!isCameraMode && (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-2"> {/* Changed items-stretch to items-center for better vertical alignment of content */}
+                    <div className="flex items-center gap-2">
                       <FormControl className="flex-grow min-w-0">
                         <Input 
                           type="file" 
@@ -317,7 +330,7 @@ export default function ExpensesPage() {
                           className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
                         />
                       </FormControl>
-                      <Button type="button" variant="outline" onClick={startCamera} className="shrink-0"> {/* Removed size="sm" */}
+                      <Button type="button" variant="outline" onClick={startCamera} className="shrink-0">
                         <Camera className="mr-2 h-4 w-4" /> Capture
                       </Button>
                     </div>
@@ -373,7 +386,7 @@ export default function ExpensesPage() {
                       <XCircle className="mr-2 h-4 w-4" /> Cancel Camera
                     </Button>
                   </div>
-                   {selectedFile && isCameraMode && ( // Show info about captured file while still in camera sub-section
+                   {selectedFile && isCameraMode && ( 
                         <FormDescription className="flex items-center gap-1 pt-1 text-xs">
                             <Paperclip className="h-3 w-3 text-muted-foreground" /> Captured: {selectedFile.name} ({formatFileSize(selectedFile.size)})
                         </FormDescription>
@@ -395,7 +408,6 @@ export default function ExpensesPage() {
                     </div>
                 </div>
               )}
-
 
               <Button type="submit" className="w-full md:w-auto">Add Expense</Button>
             </form>
@@ -439,7 +451,15 @@ export default function ExpensesPage() {
                     <TableCell>{entry.submittedBy || <span className="text-xs text-muted-foreground italic">N/A</span>}</TableCell>
                     <TableCell className="text-center">
                       {entry.documentFileName ? (
-                        <Paperclip className="h-4 w-4 mx-auto text-muted-foreground" title={entry.documentFileName} />
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-7 w-7" 
+                          onClick={() => handleViewHistoryAttachment(entry)}
+                          aria-label="View attachment metadata"
+                        >
+                          <FileText className="h-4 w-4 text-primary" title={entry.documentFileName} />
+                        </Button>
                       ) : (
                         <span className="text-xs text-muted-foreground italic">-</span>
                       )}
@@ -455,6 +475,7 @@ export default function ExpensesPage() {
         </CardContent>
       </Card>
 
+      {/* Dialog for viewing currently selected/captured image in the form */}
       <Dialog open={isViewAttachmentDialogOpen} onOpenChange={setIsViewAttachmentDialogOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
@@ -485,6 +506,35 @@ export default function ExpensesPage() {
             <DialogClose asChild>
               <Button type="button" variant="outline">Close</Button>
             </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for viewing attachment metadata from history */}
+      <Dialog open={isHistoryAttachmentDialogValidOpen} onOpenChange={setIsHistoryAttachmentDialogValidOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Document Metadata: {historyAttachmentToView?.documentFileName}</DialogTitle>
+          </DialogHeader>
+          {historyAttachmentToView && (
+            <div className="space-y-3 py-4">
+              <p><span className="font-semibold">File Name:</span> {historyAttachmentToView.documentFileName}</p>
+              <p><span className="font-semibold">File Type:</span> {historyAttachmentToView.documentFileType || "N/A"}</p>
+              <p><span className="font-semibold">File Size:</span> {formatFileSize(historyAttachmentToView.documentFileSize)}</p>
+              
+              <Alert variant="default" className="mt-6 bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-700">
+                <InfoIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                <AlertTitle className="text-blue-700 dark:text-blue-300">Important Note on File Storage</AlertTitle>
+                <AlertDescription className="text-xs text-blue-600 dark:text-blue-400">
+                  This application demo stores document metadata (like name, type, and size) only. 
+                  Actual file content is not uploaded to or stored on any server. 
+                  Therefore, direct viewing, printing, or downloading of previously "attached" files from history is not possible.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsHistoryAttachmentDialogValidOpen(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
