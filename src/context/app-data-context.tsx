@@ -1,19 +1,17 @@
 
 "use client";
 
-import type { RevenueEntry, ExpenseEntry, Employee, EmployeeDocument, Invoice } from '@/lib/types'; // Removed TimeEntry
+import type { RevenueEntry, ExpenseEntry, Employee, EmployeeDocument, Invoice, User } from '@/lib/types';
 import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-// Removed date-fns imports related to TimeEntry: isSameDay, getDaysInMonth as fnGetDaysInMonth, startOfMonth, endOfMonth, eachDayOfInterval
-
+import { useToast } from "@/hooks/use-toast"; // For showing mock OTP
 
 interface AppDataContextType {
   revenueEntries: RevenueEntry[];
   expenseEntries: ExpenseEntry[];
   employees: Employee[];
   invoices: Invoice[];
-  // Removed timeEntries: TimeEntry[];
-
+  
   addRevenueEntry: (entry: Omit<RevenueEntry, 'id' | 'date'> & { date: string | Date }) => void;
   addExpenseEntry: (entry: Omit<ExpenseEntry, 'id' | 'date'> & { date: string | Date }) => void;
   
@@ -27,18 +25,18 @@ interface AppDataContextType {
   getInvoiceById: (invoiceId: string) => Invoice | undefined;
   getNextInvoiceNumber: () => string;
 
-  // Removed payroll-related functions
-  // addTimeEntry: (employeeId: string, date: Date) => void;
-  // removeTimeEntry: (employeeId: string, date: Date) => void;
-  // getTimeEntriesForEmployeeAndMonth: (employeeId: string, year: number, month: number) => TimeEntry[];
-  // getPresentDaysForEmployeeInMonth: (employeeId: string, year: number, month: number) => number;
-  // getDaysInMonth: (year: number, month: number) => Date[];
-
-
   totalRevenue: number;
   totalExpenses: number;
   netProfit: number;
   loadingEmployees: boolean;
+
+  // Auth state and functions
+  currentUser: User | null;
+  isAuthenticated: boolean;
+  authLoading: boolean;
+  sendOtp: (mobileNumber: string) => Promise<boolean>; // Returns true if mock OTP "sent"
+  loginWithOtp: (mobileNumber: string, otp: string) => Promise<boolean>; // Returns true if login successful
+  logout: () => void;
 }
 
 const AppDataContext = createContext<AppDataContextType | undefined>(undefined);
@@ -56,6 +54,7 @@ const initialExpenses: ExpenseEntry[] = [
 
 const initialInvoices: Invoice[] = [];
 
+const MOCK_OTP = "123456"; // Fixed OTP for demonstration
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [revenueEntries, setRevenueEntries] = useState<RevenueEntry[]>(initialRevenue);
@@ -63,7 +62,54 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [employees, setEmployees] = useState<Employee[]>([]); 
   const [loadingEmployees, setLoadingEmployees] = useState<boolean>(true);
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
-  // Removed const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+
+  // Auth state
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [authLoading, setAuthLoading] = useState<boolean>(true); // To handle initial auth check
+  const { toast } = useToast();
+
+  // Simulate checking auth status on mount (e.g., from localStorage)
+  useEffect(() => {
+    const storedUser = localStorage.getItem('currentUserMobile');
+    if (storedUser) {
+      setCurrentUser({ mobileNumber: storedUser });
+      setIsAuthenticated(true);
+    }
+    setAuthLoading(false);
+  }, []);
+
+  const sendOtp = useCallback(async (mobileNumber: string): Promise<boolean> => {
+    console.log(`Mock OTP for ${mobileNumber}: ${MOCK_OTP}`);
+    toast({
+      title: "Mock OTP Sent",
+      description: `For testing, use OTP: ${MOCK_OTP} for mobile number ${mobileNumber}.`,
+      duration: 10000, // Keep it on screen longer
+    });
+    // In a real app, you'd call your backend to send an OTP via SMS here.
+    return true;
+  }, [toast]);
+
+  const loginWithOtp = useCallback(async (mobileNumber: string, otp: string): Promise<boolean> => {
+    if (otp === MOCK_OTP) {
+      const user: User = { mobileNumber };
+      setCurrentUser(user);
+      setIsAuthenticated(true);
+      localStorage.setItem('currentUserMobile', mobileNumber); // Persist mock login
+      toast({ title: "Login Successful", description: `Welcome, ${mobileNumber}!`});
+      return true;
+    }
+    toast({ title: "Login Failed", description: "Invalid OTP. Please try again.", variant: "destructive" });
+    return false;
+  }, [toast]);
+
+  const logout = useCallback(() => {
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+    localStorage.removeItem('currentUserMobile'); // Clear mock login
+    toast({ title: "Logged Out", description: "You have been successfully logged out."});
+    // Optional: redirect to login page or home page if not handled by router
+  }, [toast]);
 
 
   useEffect(() => {
@@ -153,7 +199,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
   
   const getEmployeeById = useCallback(async (employeeId: string): Promise<Employee | undefined> => {
-    // setLoadingEmployees(true); // Removed to prevent a loop if called during render
     try {
       const response = await fetch(`/api/employees/${employeeId}`);
       if (!response.ok) {
@@ -177,9 +222,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error(`Error fetching employee ${employeeId} from API:`, error);
       throw error;
-    } /* finally { // Removed to prevent a loop
-      setLoadingEmployees(false);
-    } */
+    }
   }, []);
 
 
@@ -312,7 +355,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     };
     setInvoices(prev => [...prev, newInvoice].sort((a, b) => b.invoiceDate.getTime() - a.invoiceDate.getTime()));
     return newInvoice;
-  }, [getNextInvoiceNumber]); 
+  }, [getNextInvoiceNumber, invoices]); 
 
   const updateInvoiceStatus = useCallback((invoiceId: string, status: Invoice['status']) => {
     setInvoices(prevInvoices => 
@@ -328,9 +371,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return invoices.find(inv => inv.id === invoiceId);
   }, [invoices]);
 
-  // Removed Time Entry Management
-  // Removed getDaysInMonth
-
 
   const totalRevenue = useMemo(() => revenueEntries.reduce((sum, entry) => sum + entry.amount, 0), [revenueEntries]);
   const totalExpenses = useMemo(() => expenseEntries.reduce((sum, entry) => sum + entry.amount, 0), [expenseEntries]);
@@ -342,7 +382,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       expenseEntries, 
       employees, 
       invoices,
-      // Removed timeEntries,
       addRevenueEntry, 
       addExpenseEntry,
       addEmployee, 
@@ -353,11 +392,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       updateInvoiceStatus,
       getInvoiceById,
       getNextInvoiceNumber,
-      // Removed payroll-related functions
       totalRevenue,
       totalExpenses,
       netProfit,
-      loadingEmployees
+      loadingEmployees,
+      // Auth
+      currentUser,
+      isAuthenticated,
+      authLoading,
+      sendOtp,
+      loginWithOtp,
+      logout,
     }}>
       {children}
     </AppDataContext.Provider>
@@ -371,4 +416,3 @@ export function useAppData() {
   }
   return context;
 }
-

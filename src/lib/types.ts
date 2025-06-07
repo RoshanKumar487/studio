@@ -63,5 +63,7 @@ export interface Invoice {
   status: 'Draft' | 'Sent' | 'Paid' | 'Overdue';
 }
 
-// TimeEntry interface removed
-
+// User type for authentication
+export interface User {
+  mobileNumber: string;
+}
