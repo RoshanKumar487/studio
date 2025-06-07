@@ -11,7 +11,7 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'zod';
 
-export const SendInvoiceEmailInputSchema = z.object({
+const SendInvoiceEmailInputSchema = z.object({
   invoiceId: z.string().describe('The ID of the invoice to be sent.'),
   recipientEmail: z.string().email().describe('The email address of the recipient.'),
   customerName: z.string().describe('The name of the customer receiving the invoice.'),
@@ -19,7 +19,7 @@ export const SendInvoiceEmailInputSchema = z.object({
 });
 export type SendInvoiceEmailInput = z.infer<typeof SendInvoiceEmailInputSchema>;
 
-export const SendInvoiceEmailOutputSchema = z.object({
+const SendInvoiceEmailOutputSchema = z.object({
   success: z.boolean().describe('Whether the email sending simulation was successful.'),
   message: z.string().describe('A message indicating the outcome of the simulation.'),
 });
@@ -71,3 +71,4 @@ const sendInvoiceEmailFlow = ai.defineFlow(
     };
   }
 );
+
