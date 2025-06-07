@@ -1,10 +1,9 @@
 
 "use client";
 
-import type { RevenueEntry, ExpenseEntry, Employee, EmployeeDocument, Invoice, User } from '@/lib/types';
+import type { RevenueEntry, ExpenseEntry, Employee, EmployeeDocument, Invoice } from '@/lib/types';
 import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { useToast } from "@/hooks/use-toast"; // For showing mock OTP
 
 interface AppDataContextType {
   revenueEntries: RevenueEntry[];
@@ -29,14 +28,6 @@ interface AppDataContextType {
   totalExpenses: number;
   netProfit: number;
   loadingEmployees: boolean;
-
-  // Auth state and functions
-  currentUser: User | null;
-  isAuthenticated: boolean;
-  authLoading: boolean;
-  sendOtp: (mobileNumber: string) => Promise<boolean>; // Returns true if mock OTP "sent"
-  loginWithOtp: (mobileNumber: string, otp: string) => Promise<boolean>; // Returns true if login successful
-  logout: () => void;
 }
 
 const AppDataContext = createContext<AppDataContextType | undefined>(undefined);
@@ -54,63 +45,12 @@ const initialExpenses: ExpenseEntry[] = [
 
 const initialInvoices: Invoice[] = [];
 
-const MOCK_OTP = "123456"; // Fixed OTP for demonstration
-
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [revenueEntries, setRevenueEntries] = useState<RevenueEntry[]>(initialRevenue);
   const [expenseEntries, setExpenseEntries] = useState<ExpenseEntry[]>(initialExpenses);
   const [employees, setEmployees] = useState<Employee[]>([]); 
   const [loadingEmployees, setLoadingEmployees] = useState<boolean>(true);
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
-
-  // Auth state
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [authLoading, setAuthLoading] = useState<boolean>(true); // To handle initial auth check
-  const { toast } = useToast();
-
-  // Simulate checking auth status on mount (e.g., from localStorage)
-  useEffect(() => {
-    const storedUser = localStorage.getItem('currentUserMobile');
-    if (storedUser) {
-      setCurrentUser({ mobileNumber: storedUser });
-      setIsAuthenticated(true);
-    }
-    setAuthLoading(false);
-  }, []);
-
-  const sendOtp = useCallback(async (mobileNumber: string): Promise<boolean> => {
-    console.log(`Mock OTP for ${mobileNumber}: ${MOCK_OTP}`);
-    toast({
-      title: "Mock OTP Sent",
-      description: `For testing, use OTP: ${MOCK_OTP} for mobile number ${mobileNumber}.`,
-      duration: 10000, // Keep it on screen longer
-    });
-    // In a real app, you'd call your backend to send an OTP via SMS here.
-    return true;
-  }, [toast]);
-
-  const loginWithOtp = useCallback(async (mobileNumber: string, otp: string): Promise<boolean> => {
-    if (otp === MOCK_OTP) {
-      const user: User = { mobileNumber };
-      setCurrentUser(user);
-      setIsAuthenticated(true);
-      localStorage.setItem('currentUserMobile', mobileNumber); // Persist mock login
-      toast({ title: "Login Successful", description: `Welcome, ${mobileNumber}!`});
-      return true;
-    }
-    toast({ title: "Login Failed", description: "Invalid OTP. Please try again.", variant: "destructive" });
-    return false;
-  }, [toast]);
-
-  const logout = useCallback(() => {
-    setCurrentUser(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem('currentUserMobile'); // Clear mock login
-    toast({ title: "Logged Out", description: "You have been successfully logged out."});
-    // Optional: redirect to login page or home page if not handled by router
-  }, [toast]);
-
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -353,9 +293,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       employeeId: invoiceData.employeeId || undefined,
       serviceProviderName: invoiceData.serviceProviderName || undefined,
     };
-    setInvoices(prev => [...prev, newInvoice].sort((a, b) => b.invoiceDate.getTime() - a.invoiceDate.getTime()));
+    setInvoices(prev => [...prev, newInvoice].sort((a, b) => new Date(b.invoiceDate).getTime() - new Date(a.invoiceDate).getTime()));
     return newInvoice;
-  }, [getNextInvoiceNumber, invoices]); 
+  }, [getNextInvoiceNumber]); 
 
   const updateInvoiceStatus = useCallback((invoiceId: string, status: Invoice['status']) => {
     setInvoices(prevInvoices => 
@@ -396,13 +336,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       totalExpenses,
       netProfit,
       loadingEmployees,
-      // Auth
-      currentUser,
-      isAuthenticated,
-      authLoading,
-      sendOtp,
-      loginWithOtp,
-      logout,
     }}>
       {children}
     </AppDataContext.Provider>

@@ -62,8 +62,3 @@ export interface Invoice {
   notes?: string;
   status: 'Draft' | 'Sent' | 'Paid' | 'Overdue';
 }
-
-// User type for authentication
-export interface User {
-  mobileNumber: string;
-}
