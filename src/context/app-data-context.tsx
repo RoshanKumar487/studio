@@ -146,13 +146,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const addExpenseEntry = useCallback(async (entry: Omit<ExpenseEntry, 'id' | 'date'> & { date: string | Date }) => {
     setLoadingExpenses(true);
     try {
+      const payload = {
+        ...entry,
+        date: typeof entry.date === 'string' ? entry.date : entry.date.toISOString(),
+        // Ensure optional fields are present or explicitly undefined if not provided by `entry`
+        documentFileName: entry.documentFileName || undefined,
+        documentFileType: entry.documentFileType || undefined,
+        documentFileSize: entry.documentFileSize || undefined,
+        submittedBy: entry.submittedBy || undefined,
+      };
       const response = await fetch('/api/expenses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...entry,
-          date: typeof entry.date === 'string' ? entry.date : entry.date.toISOString(),
-        }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({message: `Failed to add expense entry (Status: ${response.status})`}));
@@ -199,9 +205,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [toast]);
   
   const getEmployeeById = useCallback(async (employeeId: string): Promise<Employee | undefined> => {
-    // This function can remain largely the same, relying on the API.
-    // However, ensure local state might be up-to-date if frequent calls are an issue.
-    // For now, it directly calls the API as before.
     setLoadingEmployees(true);
     try {
       const response = await fetch(`/api/employees/${employeeId}`);
@@ -211,7 +214,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         throw new Error(errorData.message || `Failed to fetch employee ${employeeId} (Status: ${response.status})`);
       }
       const employee: Employee = await response.json();
-      return { // Process dates
+      return {
         ...employee,
         documents: Array.isArray(employee.documents) ? employee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
         startDate: employee.startDate ? new Date(employee.startDate) : null,
@@ -227,10 +230,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [toast]);
 
   const addEmployeeDocument = useCallback(async (employeeId: string, documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'>): Promise<Employee | null> => {
-    setLoadingEmployees(true); // Indicate loading for this specific employee or general employee list
+    setLoadingEmployees(true); 
     try {
-      const response = await fetch(`/api/employees/${employeeId}/documents`, { // Assuming a dedicated documents API or using PUT on employee
-          method: 'POST', // Or PUT to employee with full document list
+      const response = await fetch(`/api/employees/${employeeId}/documents`, {
+          method: 'POST', 
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(documentData),
       });
@@ -239,11 +242,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const errorData = await response.json().catch(() => ({message: `Failed to add document (Status: ${response.status})`}));
         throw new Error(errorData.message || `Failed to add document (Status: ${response.status})`);
       }
-      const updatedEmployee: Employee = await response.json(); // API should return the updated employee
+      const updatedEmployee: Employee = await response.json(); 
       const processedEmployee = {
         ...updatedEmployee,
         documents: Array.isArray(updatedEmployee.documents) ? updatedEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
         startDate: updatedEmployee.startDate ? new Date(updatedEmployee.startDate) : null,
+        actualSalary: updatedEmployee.actualSalary === undefined ? null : updatedEmployee.actualSalary,
       };
       setEmployees(prev => prev.map(emp => emp.id === employeeId ? processedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
       return processedEmployee;
@@ -259,7 +263,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const deleteEmployeeDocument = useCallback(async (employeeId: string, documentId: string): Promise<Employee | null> => {
     setLoadingEmployees(true);
     try {
-       // Similar to add, but DELETE method or adjust PUT to remove
       const response = await fetch(`/api/employees/${employeeId}/documents/${documentId}`, {
           method: 'DELETE',
       });
@@ -272,6 +275,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ...updatedEmployee,
         documents: Array.isArray(updatedEmployee.documents) ? updatedEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
         startDate: updatedEmployee.startDate ? new Date(updatedEmployee.startDate) : null,
+        actualSalary: updatedEmployee.actualSalary === undefined ? null : updatedEmployee.actualSalary,
       };
       setEmployees(prev => prev.map(emp => emp.id === employeeId ? processedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
       return processedEmployee;
@@ -284,7 +288,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }, [toast]);
   
-  // getNextInvoiceNumber remains client-side as per previous logic for now
   const getNextInvoiceNumber = useCallback(() => {
     const year = new Date().getFullYear();
     const yearInvoices = invoices.filter(inv => inv.invoiceNumber.startsWith(`INV-${year}`));
@@ -298,7 +301,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ...invoiceData,
       invoiceDate: typeof invoiceData.invoiceDate === 'string' ? invoiceData.invoiceDate : invoiceData.invoiceDate.toISOString(),
       dueDate: typeof invoiceData.dueDate === 'string' ? invoiceData.dueDate : invoiceData.dueDate.toISOString(),
-      invoiceNumber: getNextInvoiceNumber() // Client-generated for now
+      invoiceNumber: getNextInvoiceNumber()
     };
     try {
       const response = await fetch('/api/invoices', {
@@ -356,7 +359,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [toast]);
 
   const getInvoiceById = useCallback((invoiceId: string) => {
-    // This will return from local state, which should be populated by the initial fetch.
     return invoices.find(inv => inv.id === invoiceId);
   }, [invoices]);
 
@@ -401,4 +403,3 @@ export function useAppData() {
   }
   return context;
 }
-

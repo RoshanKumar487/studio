@@ -6,8 +6,8 @@ import type { ExpenseEntry } from '@/lib/types';
 
 // Mock data if MongoDB URI is not set
 const staticExpenses: ExpenseEntry[] = [
-  { id: 'static-exp-1', date: new Date(2024, 6, 2), amount: 150, category: "Software", description: "Design tool (Mock)" },
-  { id: 'static-exp-2', date: new Date(2024, 6, 7), amount: 80, category: "Marketing", description: "Online ads (Mock)" },
+  { id: 'static-exp-1', date: new Date(2024, 6, 2), amount: 150, category: "Software", description: "Design tool (Mock)", submittedBy: "Admin", documentFileName: "receipt.pdf" },
+  { id: 'static-exp-2', date: new Date(2024, 6, 7), amount: 80, category: "Marketing", description: "Online ads (Mock)", submittedBy: "User X" },
 ];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -20,10 +20,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.warn("**************************************************************************************");
 
     if (req.method === 'GET') {
-      return res.status(200).json(staticExpenses.map(e => ({...e, date: e.date.toISOString()})));
+      return res.status(200).json(staticExpenses.map(e => ({
+        ...e, 
+        date: e.date.toISOString(),
+        documentFileSize: e.documentFileSize || undefined, // ensure optional fields are handled
+        documentFileType: e.documentFileType || undefined,
+    })));
     }
     if (req.method === 'POST') {
-      const { date, amount, category, description } = req.body as Omit<ExpenseEntry, 'id'>;
+      const { date, amount, category, description, submittedBy, documentFileName, documentFileType, documentFileSize } = req.body as Omit<ExpenseEntry, 'id'>;
       if (!date || amount == null || !category || !description) {
         return res.status(400).json({ message: 'Missing required fields for mock expense entry.' });
       }
@@ -33,7 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         amount: Number(amount),
         category,
         description,
+        submittedBy: submittedBy || undefined,
+        documentFileName: documentFileName || undefined,
+        documentFileType: documentFileType || undefined,
+        documentFileSize: documentFileSize || undefined,
       };
+      // staticExpenses.push(newMockExpense); // Persist for mock session if desired
       return res.status(201).json({...newMockExpense, date: newMockExpense.date.toISOString()});
     }
     res.setHeader('Allow', ['GET', 'POST']);
@@ -52,19 +62,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const entriesResult: ExpenseEntry[] = entriesFromDb.map(entry => ({ 
         ...entry, 
         id: entry._id!.toString(),
-        date: new Date(entry.date), // Ensure date is a Date object
+        date: new Date(entry.date),
+        documentFileName: entry.documentFileName || undefined,
+        documentFileType: entry.documentFileType || undefined,
+        documentFileSize: entry.documentFileSize || undefined,
+        submittedBy: entry.submittedBy || undefined,
       }));
       res.status(200).json(entriesResult);
     } else if (req.method === 'POST') {
-      const { date, amount, category, description } = req.body as Omit<ExpenseEntry, 'id'>;
+      const { date, amount, category, description, submittedBy, documentFileName, documentFileType, documentFileSize } = req.body as Omit<ExpenseEntry, 'id'>;
       if (!date || amount == null || !category || !description) {
         return res.status(400).json({ message: 'Date, amount, category, and description are required.' });
       }
-      const newEntryData = {
+      const newEntryData: Omit<ExpenseEntry, 'id'> & { createdAt: Date } = {
         date: new Date(date),
         amount: Number(amount),
         category,
         description,
+        submittedBy: submittedBy || undefined,
+        documentFileName: documentFileName || undefined,
+        documentFileType: documentFileType || undefined,
+        documentFileSize: documentFileSize || undefined,
         createdAt: new Date(),
       };
       const result = await expensesCollection.insertOne(newEntryData);

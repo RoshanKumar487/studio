@@ -12,6 +12,10 @@ export interface ExpenseEntry {
   amount: number;
   category: string;
   description:string;
+  documentFileName?: string;
+  documentFileType?: string;
+  documentFileSize?: number;
+  submittedBy?: string;
 }
 
 export interface EmployeeDocument {
