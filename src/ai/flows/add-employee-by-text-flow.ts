@@ -9,17 +9,17 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod'; // Changed from 'genkit'
 
 // Keep employmentTypes in sync with src/app/(app)/hr/page.tsx
 const employmentTypes = ['Full-time', 'Part-time', 'Contract'] as const;
 
-export const AddEmployeeByTextInputSchema = z.object({
+const AddEmployeeByTextInputSchema = z.object({
   employeeText: z.string().describe('Natural language text describing the employee to be added. Include name, email, job title, start date (YYYY-MM-DD), and employment type.'),
 });
 export type AddEmployeeByTextInput = z.infer<typeof AddEmployeeByTextInputSchema>;
 
-export const AddEmployeeByTextOutputSchema = z.object({
+const AddEmployeeByTextOutputSchema = z.object({
   success: z.boolean().describe('Whether the parsing was successful and all required fields are present.'),
   message: z.string().describe('A message indicating success or failure, or asking for clarification.'),
   name: z.string().optional().describe('Extracted full name of the employee.'),

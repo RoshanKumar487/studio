@@ -9,16 +9,16 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod'; // Changed from 'genkit'
 
 const invoiceStatuses = ['Draft', 'Sent', 'Paid', 'Overdue'] as const;
 
-export const ProcessInvoiceQueryInputSchema = z.object({
+const ProcessInvoiceQueryInputSchema = z.object({
   query: z.string().describe('Natural language query about an invoice. E.g., "Show details for INV-2024-0001" or "Mark INV-2024-0002 as Paid".'),
 });
 export type ProcessInvoiceQueryInput = z.infer<typeof ProcessInvoiceQueryInputSchema>;
 
-export const ProcessInvoiceQueryOutputSchema = z.object({
+const ProcessInvoiceQueryOutputSchema = z.object({
   intent: z.enum(['get_details', 'update_status', 'unknown']).describe('The recognized intent of the query.'),
   invoiceNumber: z.string().optional().describe('The invoice number extracted from the query (e.g., "INV-2024-0001").'),
   newStatus: z.enum(invoiceStatuses).optional().describe('The new status for an update_status intent.'),
