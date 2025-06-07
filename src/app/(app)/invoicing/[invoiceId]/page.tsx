@@ -231,8 +231,10 @@ export default function InvoiceDetailPage() {
             <p className="text-sm text-muted-foreground">
                 Thank you for your business!
             </p>
-            <p className="text-xs text-muted-foreground mt-2">
-                Powered by <span className="font-semibold text-primary">FlowHQ</span>
+            <p className="text-xs text-muted-foreground mt-4">
+                Powered by FlowHQ <br />
+                This invoice was generated with the help of Wave Financial Inc. <br />
+                To learn more, and create your own free account visit <a href="https://www.flowhq.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">www.flowhq.com</a>
             </p>
         </CardFooter>
       </Card>
@@ -258,3 +260,4 @@ export default function InvoiceDetailPage() {
     </div>
   );
 }
+
