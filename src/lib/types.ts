@@ -31,6 +31,7 @@ export interface Employee {
   jobTitle?: string;
   startDate?: Date | null; // Can be null if not set
   employmentType?: 'Full-time' | 'Part-time' | 'Contract';
+  actualSalary?: number | null; // Monthly salary
   documents: EmployeeDocument[]; // Documents will be an array within the employee object in Firestore
 }
 
@@ -57,4 +58,10 @@ export interface Invoice {
   grandTotal: number;
   notes?: string;
   status: 'Draft' | 'Sent' | 'Paid' | 'Overdue';
+}
+
+export interface TimeEntry {
+  id: string;
+  employeeId: string;
+  date: Date; // Date of presence
 }

@@ -44,20 +44,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           id: employee._id!.toString(), 
           documents: employee.documents || [],
           startDate: employee.startDate ? new Date(employee.startDate) : null,
-        });
+          actualSalary: employee.actualSalary === undefined ? null : employee.actualSalary,
+        } as Employee);
       } else {
         res.status(404).json({ message: 'Employee not found' });
       }
     } else if (req.method === 'PUT') {
-      const { documents, name, email, jobTitle, startDate, employmentType } = req.body as Partial<Pick<Employee, 'documents' | 'name' | 'email' | 'jobTitle' | 'startDate' | 'employmentType'>>;
+      const { documents, name, email, jobTitle, startDate, employmentType, actualSalary } = req.body as Partial<Pick<Employee, 'documents' | 'name' | 'email' | 'jobTitle' | 'startDate' | 'employmentType' | 'actualSalary'>>;
       
       const updateFields: Record<string, any> = {};
 
       if (name !== undefined) updateFields.name = name;
-      if (email !== undefined) updateFields.email = email; // Allows setting email to "" or null
+      if (email !== undefined) updateFields.email = email; 
       if (jobTitle !== undefined) updateFields.jobTitle = jobTitle;
       if (startDate !== undefined) updateFields.startDate = startDate ? new Date(startDate) : null;
       if (employmentType !== undefined) updateFields.employmentType = employmentType;
+      if (actualSalary !== undefined) updateFields.actualSalary = actualSalary === null ? null : (typeof actualSalary === 'string' ? parseFloat(actualSalary) : actualSalary) ;
+
 
       if (documents !== undefined) {
         if (!Array.isArray(documents)) {
@@ -75,7 +78,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (Object.keys(updateFields).length === 0) {
-        return res.status(400).json({ message: 'No update fields provided.' });
+        // If only an empty documents array was sent, this might be intentional to clear docs, handle separately or disallow if needed
+        if (documents && Array.isArray(documents) && documents.length === 0 && !Object.keys(updateFields).some(k => k !== 'documents')) {
+             updateFields.documents = []; // Allow clearing documents
+        } else {
+            return res.status(400).json({ message: 'No update fields provided.' });
+        }
       }
       
       updateFields.updatedAt = new Date();
@@ -88,16 +96,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (result.matchedCount === 0) {
         return res.status(404).json({ message: 'Employee not found for update.' });
       }
-      const updatedEmployee = await employeesCollection.findOne({ _id: objectId });
-      if (!updatedEmployee) {
+      const updatedEmployeeDoc = await employeesCollection.findOne({ _id: objectId });
+      if (!updatedEmployeeDoc) {
           return res.status(404).json({ message: 'Updated employee not found.'});
       }
-      res.status(200).json({ 
-        ...updatedEmployee, 
-        id: updatedEmployee._id!.toString(), 
-        documents: updatedEmployee.documents || [],
-        startDate: updatedEmployee.startDate ? new Date(updatedEmployee.startDate) : null,
-      });
+      const updatedEmployeeResult: Employee = { 
+        ...updatedEmployeeDoc, 
+        id: updatedEmployeeDoc._id!.toString(), 
+        documents: updatedEmployeeDoc.documents || [],
+        startDate: updatedEmployeeDoc.startDate ? new Date(updatedEmployeeDoc.startDate) : null,
+        actualSalary: updatedEmployeeDoc.actualSalary === undefined ? null : updatedEmployeeDoc.actualSalary,
+      };
+      res.status(200).json(updatedEmployeeResult);
     } else {
       res.setHeader('Allow', ['GET', 'PUT']);
       res.status(405).end(`Method ${req.method} Not Allowed`);

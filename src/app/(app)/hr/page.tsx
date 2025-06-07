@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,12 +18,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from '@/components/shared/date-picker';
-import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning, Loader2 } from 'lucide-react';
+import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning, Loader2, Camera, XCircle, VideoOff } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import Image from 'next/image';
+import NextImage from 'next/image'; // Renamed to avoid conflict with Lucide's Image
+
 
 const employmentTypes = ['Full-time', 'Part-time', 'Contract'] as const;
 
@@ -33,6 +34,7 @@ const employeeSchema = z.object({
   jobTitle: z.string().max(100, "Job title too long.").optional().or(z.literal('')),
   startDate: z.date().nullable().optional(),
   employmentType: z.enum(employmentTypes).optional(),
+  actualSalary: z.coerce.number().min(0, "Salary must be non-negative").nullable().optional(),
 });
 type EmployeeFormData = z.infer<typeof employeeSchema>;
 
@@ -56,9 +58,15 @@ export default function HrPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
+  const [isCameraMode, setIsCameraMode] = useState(false);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+
   const employeeForm = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
-    defaultValues: { name: '', email: '', jobTitle: '', startDate: null, employmentType: undefined },
+    defaultValues: { name: '', email: '', jobTitle: '', startDate: null, employmentType: undefined, actualSalary: null },
   });
 
   const documentForm = useForm<DocumentFormData>({
@@ -68,18 +76,85 @@ export default function HrPage() {
 
   useEffect(() => {
     return () => {
-      if (imagePreviewUrl) {
-        URL.revokeObjectURL(imagePreviewUrl);
-      }
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+      stopCameraStream();
     };
   }, [imagePreviewUrl]);
 
+  const stopCameraStream = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const startCamera = async () => {
+    stopCameraStream(); // Ensure any existing stream is stopped
+    setIsCameraMode(true);
+    setHasCameraPermission(null); // Reset permission status
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+        setHasCameraPermission(true);
+      } catch (err) {
+        console.error("Error accessing camera:", err);
+        setHasCameraPermission(false);
+        toast({
+          variant: "destructive",
+          title: "Camera Access Denied",
+          description: "Please enable camera permissions in your browser settings to use this feature.",
+        });
+        setIsCameraMode(false);
+      }
+    } else {
+      setHasCameraPermission(false);
+      toast({ variant: "destructive", title: "Camera Not Supported", description: "Your browser does not support camera access." });
+      setIsCameraMode(false);
+    }
+  };
+
+  const handleCapturePhoto = () => {
+    if (videoRef.current && canvasRef.current && hasCameraPermission) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      context?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const fileName = `capture-${Date.now()}.png`;
+          const capturedFile = new File([blob], fileName, { type: 'image/png' });
+          setSelectedFile(capturedFile);
+          documentForm.setValue("name", fileName.split('.').slice(0, -1).join('.') || fileName);
+
+          if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+          const newPreviewUrl = URL.createObjectURL(capturedFile);
+          setImagePreviewUrl(newPreviewUrl);
+        }
+      }, 'image/png');
+      
+      stopCameraStream();
+      setIsCameraMode(false);
+      toast({ title: "Photo Captured", description: "Image captured and ready for document record." });
+    }
+  };
+
+
   const onEmployeeSubmit: SubmitHandler<EmployeeFormData> = async (data) => {
     try {
-        const newEmployee = await addEmployee(data);
+        const newEmployee = await addEmployee({
+          ...data,
+          actualSalary: data.actualSalary === null ? undefined : data.actualSalary, // API expects number or undefined
+        });
         if (newEmployee) {
         toast({ title: "Employee Added", description: `${data.name} has been added.` });
-        employeeForm.reset({ name: '', email: '', jobTitle: '', startDate: null, employmentType: undefined });
+        employeeForm.reset({ name: '', email: '', jobTitle: '', startDate: null, employmentType: undefined, actualSalary: null });
         setIsEmployeeFormOpen(false);
         } else {
         toast({ title: "Error", description: `Failed to add employee ${data.name}.`, variant: "destructive" });
@@ -106,6 +181,8 @@ export default function HrPage() {
             URL.revokeObjectURL(imagePreviewUrl);
             setImagePreviewUrl(null);
         }
+        setIsCameraMode(false);
+        stopCameraStream();
         const updatedEmployee = await getEmployeeById(selectedEmployee.id); 
         setSelectedEmployee(updatedEmployee || null);
       } catch (error: any) {
@@ -122,9 +199,11 @@ export default function HrPage() {
             documentForm.reset(); 
             setSelectedFile(null);
             if (imagePreviewUrl) {
-            URL.revokeObjectURL(imagePreviewUrl);
-            setImagePreviewUrl(null);
+                URL.revokeObjectURL(imagePreviewUrl);
+                setImagePreviewUrl(null);
             }
+            setIsCameraMode(false);
+            stopCameraStream();
             setIsDocumentDialogMainOpen(true);
         } else {
             toast({title: "Error", description: "Could not load employee data.", variant: "destructive"});
@@ -158,6 +237,8 @@ export default function HrPage() {
       URL.revokeObjectURL(imagePreviewUrl);
       setImagePreviewUrl(null);
     }
+    stopCameraStream();
+    setIsCameraMode(false);
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
@@ -191,6 +272,11 @@ export default function HrPage() {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
+
+  const formatCurrency = (amount: number | null | undefined) => {
+    if (amount === null || amount === undefined) return 'N/A';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  };
   
   return (
     <div className="flex flex-col gap-6">
@@ -208,7 +294,7 @@ export default function HrPage() {
               <form onSubmit={employeeForm.handleSubmit(onEmployeeSubmit)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
                 <FormField control={employeeForm.control} name="name" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Full Name</FormLabel>
+                    <FormLabel>Full Name <span className="text-destructive">*</span></FormLabel>
                     <FormControl><Input placeholder="e.g., Jane Doe" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -246,6 +332,13 @@ export default function HrPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
+                 <FormField control={employeeForm.control} name="actualSalary" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Actual Monthly Salary (USD)</FormLabel>
+                    <FormControl><Input type="number" step="0.01" placeholder="e.g., 5000" {...field} onChange={e => field.onChange(e.target.value === '' ? null : parseFloat(e.target.value))} value={field.value ?? ""} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <DialogFooter className="pt-4">
                   <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
                   <Button type="submit">Add Employee</Button>
@@ -272,8 +365,7 @@ export default function HrPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Job Title</TableHead>
                   <TableHead>Start Date</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Type</TableHead>
+                  <TableHead>Salary</TableHead>
                   <TableHead className="text-center">Docs</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -284,10 +376,7 @@ export default function HrPage() {
                     <TableCell className="font-medium">{employee.name}</TableCell>
                     <TableCell>{employee.jobTitle || 'N/A'}</TableCell>
                     <TableCell>{employee.startDate ? format(new Date(employee.startDate), "PPP") : 'N/A'}</TableCell>
-                    <TableCell>{employee.email || 'N/A'}</TableCell>
-                    <TableCell>
-                        {employee.employmentType ? <Badge variant="secondary">{employee.employmentType}</Badge> : 'N/A'}
-                    </TableCell>
+                    <TableCell>{formatCurrency(employee.actualSalary)}</TableCell>
                     <TableCell className="text-center">{employee.documents.length}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="outline" size="sm" onClick={() => openDocumentDialog(employee.id)}>
@@ -311,12 +400,14 @@ export default function HrPage() {
                 URL.revokeObjectURL(imagePreviewUrl);
                 setImagePreviewUrl(null);
             }
+            stopCameraStream();
+            setIsCameraMode(false);
         }
       }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="font-headline">Manage Documents for {selectedEmployee?.name}</DialogTitle>
-            <CardDescription>Add new document records or view existing ones. Employee data is stored in MongoDB. File metadata is stored, but actual file content upload to cloud storage is not implemented in this demo.</CardDescription>
+            <CardDescription>Add new document records. Metadata is stored in MongoDB. File content is not uploaded to cloud storage in this demo.</CardDescription>
           </DialogHeader>
           
           <Card>
@@ -327,7 +418,7 @@ export default function HrPage() {
                   <FormField control={documentForm.control} name="name" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Document Name / Title</FormLabel>
-                      <FormControl><Input placeholder="e.g., Passport, Contract, Resume" {...field} /></FormControl>
+                      <FormControl><Input placeholder="e.g., Passport, Contract, ID Photo" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -338,26 +429,69 @@ export default function HrPage() {
                       <FormMessage />
                     </FormItem>
                   )} />
-                  <FormItem>
-                    <FormLabel>Attach File</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="file" 
-                        onChange={handleFileChange} 
-                        className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-                      />
-                    </FormControl>
-                    {selectedFile && (
-                        <FormDescription className="flex items-center gap-1 pt-1">
-                            <FileUp className="h-4 w-4 text-muted-foreground" /> Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)}) - Type: {selectedFile.type}
-                        </FormDescription>
+                  
+                  {!isCameraMode && (
+                    <FormItem>
+                      <FormLabel>Attach File</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="file" 
+                          onChange={handleFileChange} 
+                          className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                        />
+                      </FormControl>
+                      {selectedFile && (
+                          <FormDescription className="flex items-center gap-1 pt-1">
+                              <FileUp className="h-4 w-4 text-muted-foreground" /> Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)}) - Type: {selectedFile.type}
+                          </FormDescription>
+                      )}
+                    </FormItem>
+                  )}
+
+                  <div className="flex gap-2 flex-wrap">
+                    {!isCameraMode && (
+                        <Button type="button" variant="outline" onClick={startCamera}>
+                            <Camera className="mr-2 h-4 w-4" /> Capture from Camera
+                        </Button>
                     )}
-                  </FormItem>
+                  </div>
+                  
+                  {isCameraMode && (
+                    <Card className="p-4 space-y-3">
+                      <CardTitle className="text-base">Camera Capture</CardTitle>
+                      <div className="relative aspect-video bg-muted rounded-md overflow-hidden">
+                        <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
+                        {hasCameraPermission === false && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white p-4">
+                                <VideoOff className="h-12 w-12 mb-2"/>
+                                <p className="text-center font-semibold">Camera Access Denied</p>
+                                <p className="text-xs text-center">Please enable camera permissions in your browser settings.</p>
+                            </div>
+                        )}
+                         {hasCameraPermission === null && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white p-4">
+                                <Loader2 className="h-12 w-12 mb-2 animate-spin"/>
+                                <p>Accessing camera...</p>
+                            </div>
+                        )}
+                      </div>
+                      <canvas ref={canvasRef} className="hidden"></canvas>
+                      <div className="flex gap-2">
+                        <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission}>
+                          <Camera className="mr-2 h-4 w-4" /> Capture Photo
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => { setIsCameraMode(false); stopCameraStream(); }}>
+                          <XCircle className="mr-2 h-4 w-4" /> Cancel Camera
+                        </Button>
+                      </div>
+                    </Card>
+                  )}
+
 
                   {imagePreviewUrl && selectedFile && selectedFile.type.startsWith('image/') && (
                     <div className="my-4 p-2 border rounded-md">
-                      <FormLabel className="text-sm">Image Preview:</FormLabel>
-                      <Image src={imagePreviewUrl} alt="Selected image preview" width={200} height={200} className="mt-2 rounded-md object-contain max-h-48 w-auto" />
+                      <FormLabel className="text-sm">Preview:</FormLabel>
+                      <NextImage src={imagePreviewUrl} alt="Selected image preview" width={200} height={200} className="mt-2 rounded-md object-contain max-h-48 w-auto" />
                     </div>
                   )}
                   {selectedFile && !selectedFile.type.startsWith('image/') && (
@@ -370,7 +504,7 @@ export default function HrPage() {
                   )}
 
                   <div className="flex flex-wrap gap-2 items-center">
-                    <Button type="submit"><PlusCircle className="mr-2 h-4 w-4"/> Add Document Record</Button>
+                    <Button type="submit" disabled={!selectedFile && !documentForm.getValues("name")}><PlusCircle className="mr-2 h-4 w-4"/> Add Document Record</Button>
                     {selectedFile && (
                       <Button type="button" variant="outline" onClick={handleDownloadSelectedFile}>
                         <Download className="mr-2 h-4 w-4" /> Download Selected File
@@ -379,7 +513,7 @@ export default function HrPage() {
                   </div>
                    <FormDescription className="text-xs">
                         Adding a record stores metadata (name, description, file details) in MongoDB.
-                        The "Download Selected File" button works only for the file currently chosen above and downloads it from your browser, not from cloud storage.
+                        The "Download Selected File" button works only for the file currently chosen/captured above and downloads it from your browser.
                     </FormDescription>
                 </form>
               </Form>
@@ -462,7 +596,7 @@ export default function HrPage() {
                   This application demo stores document metadata (like name and file details) in MongoDB.
                   Actual file content (the file itself) is not uploaded to or stored on any server or cloud storage.
                   Therefore, direct preview or download of previously "uploaded" files from this dialog is not possible.
-                  The "Download Selected File" button in the "Add Document Record" form only works for the file currently selected in your browser before its metadata is saved.
+                  The "Download Selected File" button in the "Add Document Record" form only works for the file currently selected/captured in your browser before its metadata is saved.
                 </AlertDescription>
               </Alert>
             </div>
@@ -494,7 +628,6 @@ export default function HrPage() {
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the document record for "{documentToDelete?.docName}".
-              The actual file, if stored elsewhere, will not be affected as this demo only manages metadata.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -507,5 +640,3 @@ export default function HrPage() {
     </div>
   );
 }
-
-    

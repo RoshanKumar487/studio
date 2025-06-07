@@ -33,15 +33,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === 'GET') {
       const employeesFromDb = await employeesCollection.find({}).sort({ name: 1 }).toArray();
-      const employees = employeesFromDb.map(emp => ({ 
+      const employeesResult: Employee[] = employeesFromDb.map(emp => ({ 
         ...emp, 
         id: emp._id!.toString(), 
         documents: emp.documents || [],
         startDate: emp.startDate ? new Date(emp.startDate) : null,
+        actualSalary: emp.actualSalary === undefined ? null : emp.actualSalary,
       }));
-      res.status(200).json(employees);
+      res.status(200).json(employeesResult);
     } else if (req.method === 'POST') {
-      const { name, email, jobTitle, startDate, employmentType } = req.body as Omit<Employee, 'id' | 'documents'>;
+      const { name, email, jobTitle, startDate, employmentType, actualSalary } = req.body as Omit<Employee, 'id' | 'documents'>;
       if (!name) {
         return res.status(400).json({ message: 'Employee name is required.' });
       }
@@ -51,15 +52,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         jobTitle: jobTitle || undefined,
         startDate: startDate ? new Date(startDate) : undefined,
         employmentType: employmentType || undefined,
+        actualSalary: actualSalary === undefined ? null : (typeof actualSalary === 'string' ? parseFloat(actualSalary) : actualSalary),
         documents: [] as EmployeeDocument[], 
         createdAt: new Date(),
         updatedAt: new Date(),
       };
       const result = await employeesCollection.insertOne(newEmployeeData);
-      const createdEmployee = { 
+      const createdEmployee: Employee = { 
         ...newEmployeeData, 
         id: result.insertedId.toString(),
-        startDate: newEmployeeData.startDate || null, // ensure it's null if undefined for client
+        startDate: newEmployeeData.startDate || null, 
+        actualSalary: newEmployeeData.actualSalary,
       };
       res.status(201).json(createdEmployee);
     } else {

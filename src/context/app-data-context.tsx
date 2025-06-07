@@ -1,15 +1,18 @@
 
 "use client";
 
-import type { RevenueEntry, ExpenseEntry, Employee, EmployeeDocument, Invoice } from '@/lib/types';
+import type { RevenueEntry, ExpenseEntry, Employee, EmployeeDocument, Invoice, TimeEntry } from '@/lib/types';
 import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { isSameDay, getDaysInMonth as fnGetDaysInMonth, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
+
 
 interface AppDataContextType {
   revenueEntries: RevenueEntry[];
   expenseEntries: ExpenseEntry[];
   employees: Employee[];
   invoices: Invoice[];
+  timeEntries: TimeEntry[];
 
   addRevenueEntry: (entry: Omit<RevenueEntry, 'id' | 'date'> & { date: string | Date }) => void;
   addExpenseEntry: (entry: Omit<ExpenseEntry, 'id' | 'date'> & { date: string | Date }) => void;
@@ -23,6 +26,13 @@ interface AppDataContextType {
   updateInvoiceStatus: (invoiceId: string, status: Invoice['status']) => void;
   getInvoiceById: (invoiceId: string) => Invoice | undefined;
   getNextInvoiceNumber: () => string;
+
+  addTimeEntry: (employeeId: string, date: Date) => void;
+  removeTimeEntry: (employeeId: string, date: Date) => void;
+  getTimeEntriesForEmployeeAndMonth: (employeeId: string, year: number, month: number) => TimeEntry[];
+  getPresentDaysForEmployeeInMonth: (employeeId: string, year: number, month: number) => number;
+  getDaysInMonth: (year: number, month: number) => Date[];
+
 
   totalRevenue: number;
   totalExpenses: number;
@@ -49,11 +59,11 @@ const initialInvoices: Invoice[] = [];
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const [revenueEntries, setRevenueEntries] = useState<RevenueEntry[]>(initialRevenue);
   const [expenseEntries, setExpenseEntries] = useState<ExpenseEntry[]>(initialExpenses);
-  
   const [employees, setEmployees] = useState<Employee[]>([]); 
   const [loadingEmployees, setLoadingEmployees] = useState<boolean>(true);
-
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -72,16 +82,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           throw new Error(errorMessage);
         }
         const data: Employee[] = await response.json();
-        const employeesWithEnsuredDocuments = data.map(emp => ({
+        const employeesWithEnsuredFields = data.map(emp => ({
             ...emp,
             documents: Array.isArray(emp.documents) ? emp.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
             startDate: emp.startDate ? new Date(emp.startDate) : null,
+            actualSalary: emp.actualSalary === undefined ? null : emp.actualSalary,
         }));
-        setEmployees(employeesWithEnsuredDocuments.sort((a, b) => a.name.localeCompare(b.name)));
+        setEmployees(employeesWithEnsuredFields.sort((a, b) => a.name.localeCompare(b.name)));
       } catch (error) {
         console.error("Error fetching employees from API:", error);
-         // Keep existing employees or set to empty if preferred, instead of nulling out.
-         // setEmployees([]); // Option: clear employees on error
       } finally {
         setLoadingEmployees(false);
       }
@@ -130,12 +139,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ...newEmployee,
         documents: Array.isArray(newEmployee.documents) ? newEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
         startDate: newEmployee.startDate ? new Date(newEmployee.startDate) : null,
+        actualSalary: newEmployee.actualSalary === undefined ? null : newEmployee.actualSalary,
       };
       setEmployees(prev => [...prev, processedEmployee].sort((a, b) => a.name.localeCompare(b.name)));
       return processedEmployee;
     } catch (error) {
       console.error("Error adding employee via API:", error);
-      throw error; // Re-throw to be caught by the calling component
+      throw error; 
     } finally {
       setLoadingEmployees(false);
     }
@@ -160,6 +170,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ...employee,
           documents: Array.isArray(employee.documents) ? employee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
           startDate: employee.startDate ? new Date(employee.startDate) : null,
+          actualSalary: employee.actualSalary === undefined ? null : employee.actualSalary,
       };
       return processedEmployee;
     } catch (error) {
@@ -213,6 +224,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ...updatedEmployee,
         documents: Array.isArray(updatedEmployee.documents) ? updatedEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
         startDate: updatedEmployee.startDate ? new Date(updatedEmployee.startDate) : null,
+        actualSalary: updatedEmployee.actualSalary === undefined ? null : updatedEmployee.actualSalary,
       };
       setEmployees(prev => prev.map(emp => emp.id === employeeId ? processedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
       return processedEmployee;
@@ -257,6 +269,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         ...updatedEmployee,
         documents: Array.isArray(updatedEmployee.documents) ? updatedEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
         startDate: updatedEmployee.startDate ? new Date(updatedEmployee.startDate) : null,
+        actualSalary: updatedEmployee.actualSalary === undefined ? null : updatedEmployee.actualSalary,
       };
       setEmployees(prev => prev.map(emp => emp.id === employeeId ? processedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
       return processedEmployee;
@@ -312,6 +325,40 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return invoices.find(inv => inv.id === invoiceId);
   }, [invoices]);
 
+  // Time Entry Management (Client-Side for now)
+  const addTimeEntry = useCallback((employeeId: string, date: Date) => {
+    setTimeEntries(prev => {
+      // Prevent duplicate entries for the same employee on the same day
+      if (prev.some(entry => entry.employeeId === employeeId && isSameDay(entry.date, date))) {
+        return prev;
+      }
+      return [...prev, { id: uuidv4(), employeeId, date }];
+    });
+  }, []);
+
+  const removeTimeEntry = useCallback((employeeId: string, date: Date) => {
+    setTimeEntries(prev => prev.filter(entry => !(entry.employeeId === employeeId && isSameDay(entry.date, date))));
+  }, []);
+
+  const getTimeEntriesForEmployeeAndMonth = useCallback((employeeId: string, year: number, month: number): TimeEntry[] => {
+    return timeEntries.filter(entry => 
+      entry.employeeId === employeeId &&
+      entry.date.getFullYear() === year &&
+      entry.date.getMonth() === month 
+    );
+  }, [timeEntries]);
+  
+  const getPresentDaysForEmployeeInMonth = useCallback((employeeId: string, year: number, month: number): number => {
+    return getTimeEntriesForEmployeeAndMonth(employeeId, year, month).length;
+  }, [getTimeEntriesForEmployeeAndMonth]);
+
+  const getDaysInMonth = useCallback((year: number, month: number): Date[] => {
+    const firstDay = startOfMonth(new Date(year, month));
+    const lastDay = endOfMonth(new Date(year, month));
+    return eachDayOfInterval({start: firstDay, end: lastDay});
+  }, []);
+
+
   const totalRevenue = useMemo(() => revenueEntries.reduce((sum, entry) => sum + entry.amount, 0), [revenueEntries]);
   const totalExpenses = useMemo(() => expenseEntries.reduce((sum, entry) => sum + entry.amount, 0), [expenseEntries]);
   const netProfit = useMemo(() => totalRevenue - totalExpenses, [totalRevenue, totalExpenses]);
@@ -322,6 +369,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       expenseEntries, 
       employees, 
       invoices,
+      timeEntries,
       addRevenueEntry, 
       addExpenseEntry,
       addEmployee, 
@@ -332,6 +380,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       updateInvoiceStatus,
       getInvoiceById,
       getNextInvoiceNumber,
+      addTimeEntry,
+      removeTimeEntry,
+      getTimeEntriesForEmployeeAndMonth,
+      getPresentDaysForEmployeeInMonth,
+      getDaysInMonth,
       totalRevenue,
       totalExpenses,
       netProfit,
