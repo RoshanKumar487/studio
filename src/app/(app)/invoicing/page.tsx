@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useForm, useFieldArray, type SubmitHandler, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -32,7 +32,8 @@ const lineItemSchema = z.object({
 const invoiceSchema = z.object({
   companyName: z.string().min(1, "Your company name is required"),
   companyAddress: z.string().optional(),
-  employeeId: z.string().optional(),
+  employeeId: z.string().optional().nullable(),
+  serviceProviderName: z.string().optional(),
   customerName: z.string().min(1, "Customer name is required"),
   customerAddress: z.string().optional(),
   invoiceDate: z.date({ required_error: "Invoice date is required."}),
@@ -41,7 +42,15 @@ const invoiceSchema = z.object({
   taxRate: z.coerce.number().min(0).max(1).default(0), 
   notes: z.string().optional(),
   status: z.enum(['Draft', 'Sent', 'Paid', 'Overdue']).default('Draft'),
+}).refine(data => {
+    // If employeeId is selected, serviceProviderName is not required
+    // If employeeId is NOT selected, serviceProviderName can be provided
+    return !!data.employeeId || !!data.serviceProviderName || (!data.employeeId && !data.serviceProviderName);
+}, {
+    message: "Either select an employee or enter a service provider name if applicable.",
+    path: ["serviceProviderName"], // Or a more general path if needed
 });
+
 
 type InvoiceFormData = z.infer<typeof invoiceSchema>;
 
@@ -53,8 +62,8 @@ export default function InvoicingPage() {
   const form = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
-      companyName: 'My Awesome Company LLC', // Default company name
-      companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321', // Default company address
+      companyName: 'My Awesome Company LLC', 
+      companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321', 
       customerName: '',
       customerAddress: '',
       invoiceDate: new Date(),
@@ -63,7 +72,8 @@ export default function InvoicingPage() {
       taxRate: 0,
       notes: '',
       status: 'Draft',
-      employeeId: undefined, 
+      employeeId: null, 
+      serviceProviderName: '',
     },
   });
 
@@ -73,10 +83,19 @@ export default function InvoicingPage() {
   });
 
   const watchedLineItems = form.watch("lineItems");
+  const watchedEmployeeId = form.watch("employeeId");
+
+  useEffect(() => {
+    if (watchedEmployeeId) {
+      form.setValue("serviceProviderName", ""); // Clear manual name if employee is selected
+    }
+  }, [watchedEmployeeId, form]);
 
   const onSubmit: SubmitHandler<InvoiceFormData> = (data) => {
     const processedData = {
       ...data,
+      employeeId: data.employeeId || undefined, // Ensure undefined if null/empty
+      serviceProviderName: data.employeeId ? undefined : data.serviceProviderName, // Only use serviceProviderName if no employeeId
       lineItems: data.lineItems.map(item => ({
         ...item,
         total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
@@ -98,7 +117,8 @@ export default function InvoicingPage() {
       taxRate: 0,
       notes: '',
       status: 'Draft',
-      employeeId: undefined,
+      employeeId: null,
+      serviceProviderName: '',
     });
     setIsInvoiceFormOpen(false);
   };
@@ -142,35 +162,54 @@ export default function InvoicingPage() {
                 )} />
 
                 <Separator className="my-6" />
-                <CardTitle className="text-xl font-headline">Customer Details</CardTitle>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <FormField control={form.control} name="customerName" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Customer/Company Name</FormLabel>
-                      <FormControl><Input placeholder="e.g., Acme Corp" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={form.control} name="employeeId" render={({ field }) => (
+                <CardTitle className="text-xl font-headline">Customer & Service Details</CardTitle>
+                <FormField control={form.control} name="customerName" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Link to Service Employee (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""} >
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select an employee" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        {employees.map(emp => (<SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
+                    <FormLabel>Customer/Company Name</FormLabel>
+                    <FormControl><Input placeholder="e.g., Acme Corp" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                </div>
-                <FormField control={form.control} name="customerAddress" render={({ field }) => (
+                 <FormField control={form.control} name="customerAddress" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Customer Address (Optional)</FormLabel>
                     <FormControl><Textarea placeholder="e.g., 123 Main St, Anytown, USA" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
+
+                <FormField control={form.control} name="employeeId" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Link to Service Employee (Optional)</FormLabel>
+                    <Select 
+                      onValueChange={(value) => field.onChange(value === "" ? null : value)} 
+                      value={field.value || ""}
+                    >
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select an employee or leave blank for manual name" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        <SelectItem value="">-- None / Enter Manually Below --</SelectItem>
+                        {employees.map(emp => (<SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.jobTitle || 'N/A'})</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="serviceProviderName" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Service Provider Name (if not selected above)</FormLabel>
+                    <FormControl>
+                        <Input 
+                            placeholder="e.g., Freelancer Name, External Consultant" 
+                            {...field} 
+                            disabled={!!watchedEmployeeId} 
+                            value={watchedEmployeeId ? "" : field.value}
+                        />
+                    </FormControl>
+                    {!!watchedEmployeeId && <FormMessage>Employee selected, manual name disabled.</FormMessage>}
+                    {!watchedEmployeeId && (!field.value) && <FormMessage>Required if no employee is selected and service is by a person.</FormMessage>}
+                  </FormItem>
+                )} />
+
                 <div className="grid md:grid-cols-2 gap-4">
                   <FormField control={form.control} name="invoiceDate" render={({ field }) => (
                     <FormItem className="flex flex-col"><FormLabel>Invoice Date</FormLabel><DatePicker date={field.value} setDate={field.onChange} /><FormMessage /></FormItem>
@@ -338,3 +377,4 @@ export default function InvoicingPage() {
     </div>
   );
 }
+

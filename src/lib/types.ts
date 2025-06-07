@@ -49,6 +49,7 @@ export interface Invoice {
   companyName: string; // Name of the company sending the invoice
   companyAddress?: string; // Address of the company sending the invoice
   employeeId?: string; // Can be linked to an employee
+  serviceProviderName?: string; // Manually entered name if employeeId is not set
   customerName: string; // Name of the company/client being invoiced
   customerAddress?: string;
   invoiceDate: Date;
@@ -63,3 +64,4 @@ export interface Invoice {
 }
 
 // TimeEntry interface removed
+

@@ -37,13 +37,13 @@ export default function InvoiceDetailPage() {
     const fetchEmployee = async () => {
       if (invoice && invoice.employeeId) {
         setIsLoadingEmployee(true);
-        setServiceEmployee(undefined); // Reset while fetching
+        setServiceEmployee(undefined); 
         try {
           const emp = await getEmployeeById(invoice.employeeId);
-          setServiceEmployee(emp || null); // null if not found by API
+          setServiceEmployee(emp || null); 
         } catch (error) {
           console.error("Failed to fetch service employee:", error);
-          setServiceEmployee(null); // Set to null on error
+          setServiceEmployee(null); 
           toast({
             title: "Error",
             description: "Could not load details for the service employee.",
@@ -53,11 +53,12 @@ export default function InvoiceDetailPage() {
           setIsLoadingEmployee(false);
         }
       } else {
-        setServiceEmployee(null); // No employeeId, so no employee to fetch
+        setServiceEmployee(null); 
+        setIsLoadingEmployee(false); // Ensure loading is false if no employeeId
       }
     };
 
-    if (invoice !== undefined) { // Only fetch if invoice has been attempted to be loaded
+    if (invoice !== undefined) { 
         fetchEmployee();
     }
   }, [invoice, getEmployeeById, toast]);
@@ -96,6 +97,22 @@ export default function InvoiceDetailPage() {
     );
   }
   
+  const displayServiceProvider = () => {
+    if (isLoadingEmployee && invoice.employeeId) {
+      return <><Loader2 className="inline h-4 w-4 animate-spin" /> Loading...</>;
+    }
+    if (serviceEmployee) {
+      return serviceEmployee.name;
+    }
+    if (invoice.serviceProviderName) {
+      return invoice.serviceProviderName;
+    }
+    if (invoice.employeeId && serviceEmployee === null) {
+        return <span className="text-muted-foreground italic">Employee not found</span>;
+    }
+    return <span className="text-muted-foreground italic">N/A</span>;
+  };
+
 
   return (
     <div className="max-w-4xl mx-auto p-4 print:p-0">
@@ -149,14 +166,8 @@ export default function InvoiceDetailPage() {
             <div className="text-right">
               <p><span className="font-semibold">Invoice Date:</span> {format(invoice.invoiceDate, "PPP")}</p>
               <p><span className="font-semibold">Due Date:</span> {format(invoice.dueDate, "PPP")}</p>
-              {isLoadingEmployee && invoice.employeeId && (
-                 <p><span className="font-semibold">Service By:</span> <Loader2 className="inline h-4 w-4 animate-spin" /> Loading...</p>
-              )}
-              {!isLoadingEmployee && serviceEmployee && (
-                <p><span className="font-semibold">Service By:</span> {serviceEmployee.name}</p>
-              )}
-              {!isLoadingEmployee && invoice.employeeId && serviceEmployee === null && (
-                 <p><span className="font-semibold">Service By:</span> <span className="text-muted-foreground italic">Employee not found</span></p>
+              {(invoice.employeeId || invoice.serviceProviderName) && (
+                <p><span className="font-semibold">Service By:</span> {displayServiceProvider()}</p>
               )}
             </div>
           </div>
@@ -233,3 +244,4 @@ export default function InvoiceDetailPage() {
     </div>
   );
 }
+

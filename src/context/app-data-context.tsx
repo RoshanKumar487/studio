@@ -153,6 +153,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
   
   const getEmployeeById = useCallback(async (employeeId: string): Promise<Employee | undefined> => {
+    // setLoadingEmployees(true); // Removed to prevent a loop if called during render
     try {
       const response = await fetch(`/api/employees/${employeeId}`);
       if (!response.ok) {
@@ -176,7 +177,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error(`Error fetching employee ${employeeId} from API:`, error);
       throw error;
-    }
+    } /* finally { // Removed to prevent a loop
+      setLoadingEmployees(false);
+    } */
   }, []);
 
 
@@ -304,6 +307,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       subTotal,
       taxAmount,
       grandTotal,
+      employeeId: invoiceData.employeeId || undefined,
+      serviceProviderName: invoiceData.serviceProviderName || undefined,
     };
     setInvoices(prev => [...prev, newInvoice].sort((a, b) => b.invoiceDate.getTime() - a.invoiceDate.getTime()));
     return newInvoice;
@@ -366,3 +371,4 @@ export function useAppData() {
   }
   return context;
 }
+
