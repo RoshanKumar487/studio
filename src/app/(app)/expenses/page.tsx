@@ -21,6 +21,7 @@ import { ArrowUpDown, PlusCircle, Paperclip, Camera, Loader2, VideoOff, XCircle,
 import { useToast } from "@/hooks/use-toast";
 import { format, endOfDay } from 'date-fns';
 import NextImage from 'next/image';
+import { Label } from '@/components/ui/label'; // Import Label
 
 const expenseSchema = z.object({
   date: z.date({ required_error: "Date is required." }),
@@ -477,12 +478,12 @@ export default function ExpensesPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <FormLabel>Report Start Date <span className="text-destructive">*</span></FormLabel>
+            <div className="space-y-1">
+              <Label htmlFor="report-start-date">Report Start Date</Label>
               <DatePicker date={reportStartDate} setDate={setReportStartDate} />
             </div>
-            <div>
-              <FormLabel>Report End Date <span className="text-destructive">*</span></FormLabel>
+            <div className="space-y-1">
+              <Label htmlFor="report-end-date">Report End Date</Label>
               <DatePicker date={reportEndDate} setDate={setReportEndDate} />
             </div>
           </div>
