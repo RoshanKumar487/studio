@@ -286,7 +286,7 @@ export default function ExpensesPage() {
         documentFileType: entry.documentFileType,
         documentFileSize: entry.documentFileSize,
       });
-      setIsHistoryAttachmentDialogValiOpen(true);
+      setIsHistoryAttachmentDialogValidOpen(true);
     }
   };
 
@@ -610,7 +610,7 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isHistoryAttachmentDialogValiOpen} onOpenChange={setIsHistoryAttachmentDialogValidOpen}>
+      <Dialog open={isHistoryAttachmentDialogValidOpen} onOpenChange={setIsHistoryAttachmentDialogValidOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Document Metadata: {historyAttachmentToView?.documentFileName}</DialogTitle>
