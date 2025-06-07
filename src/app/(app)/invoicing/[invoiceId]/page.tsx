@@ -8,12 +8,11 @@ import type { Invoice, Employee } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Printer, Edit, CheckCircle, Send, AlertTriangle, Loader2, Mail } from 'lucide-react';
+import { ArrowLeft, Printer, AlertTriangle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
-import { AppLogo } from '@/components/shared/app-logo'; 
+import { AppLogo } from '@/components/shared/app-logo';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SendInvoiceEmailDialog } from '@/components/shared/send-invoice-email-dialog';
 
 
 export default function InvoiceDetailPage() {
@@ -21,10 +20,9 @@ export default function InvoiceDetailPage() {
   const params = useParams();
   const { toast } = useToast();
   const { getInvoiceById, getEmployeeById, updateInvoiceStatus } = useAppData();
-  const [invoice, setInvoice] = useState<Invoice | null | undefined>(undefined); 
+  const [invoice, setInvoice] = useState<Invoice | null | undefined>(undefined);
   const [serviceEmployee, setServiceEmployee] = useState<Employee | null | undefined>(undefined);
   const [isLoadingEmployee, setIsLoadingEmployee] = useState(false);
-  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
 
   const invoiceId = typeof params.invoiceId === 'string' ? params.invoiceId : '';
 
@@ -39,13 +37,13 @@ export default function InvoiceDetailPage() {
     const fetchEmployee = async () => {
       if (invoice && invoice.employeeId) {
         setIsLoadingEmployee(true);
-        setServiceEmployee(undefined); 
+        setServiceEmployee(undefined);
         try {
           const emp = await getEmployeeById(invoice.employeeId);
-          setServiceEmployee(emp || null); 
+          setServiceEmployee(emp || null);
         } catch (error) {
           console.error("Failed to fetch service employee:", error);
-          setServiceEmployee(null); 
+          setServiceEmployee(null);
           toast({
             title: "Error",
             description: "Could not load details for the service employee.",
@@ -55,12 +53,12 @@ export default function InvoiceDetailPage() {
           setIsLoadingEmployee(false);
         }
       } else {
-        setServiceEmployee(null); 
-        setIsLoadingEmployee(false); 
+        setServiceEmployee(null);
+        setIsLoadingEmployee(false);
       }
     };
 
-    if (invoice !== undefined) { 
+    if (invoice !== undefined) {
         fetchEmployee();
     }
   }, [invoice, getEmployeeById, toast]);
@@ -72,16 +70,15 @@ export default function InvoiceDetailPage() {
   const handleStatusChange = async (newStatus: Invoice['status']) => {
     if (invoice) {
         await updateInvoiceStatus(invoice.id, newStatus);
-        // Refetch or update local state for invoice to reflect new status
         const updatedInvoice = getInvoiceById(invoice.id);
-        setInvoice(updatedInvoice || null); 
+        setInvoice(updatedInvoice || null);
         toast({
             title: "Invoice Status Updated",
             description: `Invoice ${invoice.invoiceNumber} status changed to ${newStatus}.`,
         });
     }
   };
-  
+
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
   if (invoice === undefined) {
@@ -100,7 +97,7 @@ export default function InvoiceDetailPage() {
       </div>
     );
   }
-  
+
   const displayServiceProvider = () => {
     if (isLoadingEmployee && invoice.employeeId) {
       return <><Loader2 className="inline h-4 w-4 animate-spin" /> Loading...</>;
@@ -136,9 +133,6 @@ export default function InvoiceDetailPage() {
                     <SelectItem value="Overdue">Overdue</SelectItem>
                 </SelectContent>
             </Select>
-            <Button onClick={() => setIsEmailDialogOpen(true)}>
-                <Mail className="mr-2 h-4 w-4" /> Send by Email
-            </Button>
             <Button onClick={handlePrint}>
                 <Printer className="mr-2 h-4 w-4" /> Print / PDF
             </Button>
@@ -237,21 +231,15 @@ export default function InvoiceDetailPage() {
         </CardFooter>
       </Card>
       
-      <SendInvoiceEmailDialog
-        isOpen={isEmailDialogOpen}
-        onOpenChange={setIsEmailDialogOpen}
-        invoiceData={invoice ? { id: invoice.id, invoiceNumber: invoice.invoiceNumber, customerName: invoice.customerName } : null}
-      />
-
       <style jsx global>{`
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print\:p-0 { padding: 0 !important; }
-          .print\:shadow-none { box-shadow: none !important; }
-          .print\:border-none { border: none !important; }
-          .print\:border-b { border-bottom-width: 1px !important; border-color: hsl(var(--border)) !important; }
-          .print\:border-t { border-top-width: 1px !important; border-color: hsl(var(--border)) !important; }
-          .print\:hidden { display: none !important; }
+          .print\\:p-0 { padding: 0 !important; }
+          .print\\:shadow-none { box-shadow: none !important; }
+          .print\\:border-none { border: none !important; }
+          .print\\:border-b { border-bottom-width: 1px !important; border-color: hsl(var(--border)) !important; }
+          .print\\:border-t { border-top-width: 1px !important; border-color: hsl(var(--border)) !important; }
+          .print\\:hidden { display: none !important; }
           /* Ensure text colors are maintained for printing */
           .text-primary { color: hsl(var(--primary)) !important; }
           .text-green-600 { color: #16a34a !important; } /* Tailwind green-600 */
