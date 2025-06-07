@@ -305,34 +305,36 @@ export default function ExpensesPage() {
               <FormItem>
                 <FormLabel>Attach Receipt/Document (Optional)</FormLabel>
                 {!isCameraMode && (
-                  <FormControl>
-                    <Input 
-                      type="file" 
-                      ref={fileInputRef}
-                      onChange={handleFileChange} 
-                      className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-                    />
-                  </FormControl>
-                )}
-                {selectedFile && !isCameraMode && (
-                    <FormDescription className="flex items-center gap-1 pt-1 text-xs">
-                        <Paperclip className="h-3 w-3 text-muted-foreground" /> Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)})
-                    </FormDescription>
+                  <div className="space-y-2">
+                    <div className="flex items-stretch gap-2">
+                      <FormControl className="flex-grow min-w-0">
+                        <Input 
+                          type="file" 
+                          ref={fileInputRef}
+                          onChange={handleFileChange} 
+                          className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                        />
+                      </FormControl>
+                      <Button type="button" variant="outline" onClick={startCamera} size="sm" className="shrink-0">
+                        <Camera className="mr-2 h-4 w-4" /> Capture
+                      </Button>
+                    </div>
+                    {selectedFile && (
+                      <div className="flex items-center justify-between gap-2 rounded-md border p-2 bg-muted/50">
+                        <FormDescription className="flex items-center gap-1.5 text-xs truncate">
+                          <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate" title={selectedFile.name}>
+                            {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                          </span>
+                        </FormDescription>
+                        <Button type="button" variant="ghost" size="sm" onClick={handleDownloadSelectedFile} className="text-xs h-auto py-1 px-2 shrink-0">
+                          <Download className="mr-1 h-3.5 w-3.5" /> Download
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 )}
               </FormItem>
-
-              <div className="flex gap-2 flex-wrap items-center">
-                {!isCameraMode && (
-                    <Button type="button" variant="outline" onClick={startCamera} size="sm">
-                        <Camera className="mr-2 h-4 w-4" /> Capture from Camera
-                    </Button>
-                )}
-                {selectedFile && !isCameraMode && (
-                  <Button type="button" variant="outline" size="sm" onClick={handleDownloadSelectedFile}>
-                    <Download className="mr-2 h-4 w-4" /> Download Selected File
-                  </Button>
-                )}
-              </div>
               
               {isCameraMode && (
                 <Card className="p-4 space-y-3 border-dashed">
@@ -370,13 +372,13 @@ export default function ExpensesPage() {
                 </Card>
               )}
 
-              {imagePreviewUrl && selectedFile && selectedFile.type.startsWith('image/') && (
+              {imagePreviewUrl && selectedFile && selectedFile.type.startsWith('image/') && !isCameraMode && (
                 <div className="my-2 p-2 border rounded-md max-w-xs">
                   <FormLabel className="text-xs">Preview:</FormLabel>
                   <NextImage src={imagePreviewUrl} alt="Selected image preview" width={150} height={150} className="mt-1 rounded-md object-contain max-h-36 w-auto" />
                 </div>
               )}
-              {selectedFile && !selectedFile.type.startsWith('image/') && !imagePreviewUrl && (
+              {selectedFile && !selectedFile.type.startsWith('image/') && !imagePreviewUrl && !isCameraMode && (
                  <div className="my-2 p-2 border rounded-md bg-muted/50 text-xs">
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <FileWarning className="h-4 w-4 text-amber-500" />
@@ -446,3 +448,4 @@ export default function ExpensesPage() {
     </div>
   );
 }
+
