@@ -16,10 +16,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { DatePicker } from '@/components/shared/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSpreadsheet, PlusCircle, Trash2, Eye } from 'lucide-react';
+import { FileSpreadsheet, PlusCircle, Trash2, Eye, Check, ChevronsUpDown } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format, addDays } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 
 const lineItemSchema = z.object({
   id: z.string().optional(), 
@@ -33,7 +36,7 @@ const invoiceSchema = z.object({
   companyName: z.string().min(1, "Your company name is required"),
   companyAddress: z.string().optional(),
   employeeId: z.string().optional().nullable(),
-  serviceProviderName: z.string().optional(),
+  serviceProviderName: z.string().optional().nullable(), // Can also be null
   customerName: z.string().min(1, "Customer name is required"),
   customerAddress: z.string().optional(),
   invoiceDate: z.date({ required_error: "Invoice date is required."}),
@@ -42,21 +45,19 @@ const invoiceSchema = z.object({
   taxRate: z.coerce.number().min(0).max(1).default(0), 
   notes: z.string().optional(),
   status: z.enum(['Draft', 'Sent', 'Paid', 'Overdue']).default('Draft'),
-}).refine(data => {
-    return !!data.employeeId || !!data.serviceProviderName || (!data.employeeId && !data.serviceProviderName);
-}, {
-    message: "Either select an employee or enter a service provider name if applicable.",
-    path: ["serviceProviderName"], 
 });
 
 type InvoiceFormData = z.infer<typeof invoiceSchema>;
-
-const NO_EMPLOYEE_SELECTED_VALUE = "__NO_EMPLOYEE_SELECTED__";
 
 export default function InvoicingPage() {
   const { employees, invoices, addInvoice, getNextInvoiceNumber } = useAppData();
   const { toast } = useToast();
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+
+  // State for the Service Provider Combobox
+  const [serviceProviderComboboxOpen, setServiceProviderComboboxOpen] = useState(false);
+  // This state holds the current text in the combobox input, separate from form values initially
+  const [serviceProviderSearchText, setServiceProviderSearchText] = useState("");
 
   const form = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
@@ -83,18 +84,25 @@ export default function InvoicingPage() {
 
   const watchedLineItems = form.watch("lineItems");
   const watchedEmployeeId = form.watch("employeeId");
+  const watchedServiceProviderName = form.watch("serviceProviderName");
 
+  // Effect to set the initial text for the combobox based on form values (e.g., when editing an invoice later)
   useEffect(() => {
     if (watchedEmployeeId) {
-      form.setValue("serviceProviderName", ""); 
+      const employee = employees.find(emp => emp.id === watchedEmployeeId);
+      setServiceProviderSearchText(employee?.name || "");
+    } else {
+      setServiceProviderSearchText(watchedServiceProviderName || "");
     }
-  }, [watchedEmployeeId, form]);
+  }, [watchedEmployeeId, watchedServiceProviderName, employees]);
+
 
   const onSubmit: SubmitHandler<InvoiceFormData> = (data) => {
     const processedData = {
       ...data,
-      employeeId: data.employeeId || undefined, 
-      serviceProviderName: data.employeeId ? undefined : data.serviceProviderName, 
+      // Ensure only one of employeeId or serviceProviderName is substantially set
+      employeeId: data.employeeId || undefined,
+      serviceProviderName: data.employeeId ? undefined : (data.serviceProviderName || undefined),
       lineItems: data.lineItems.map(item => ({
         ...item,
         total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
@@ -119,10 +127,44 @@ export default function InvoicingPage() {
       employeeId: null,
       serviceProviderName: '',
     });
+    setServiceProviderSearchText(""); // Reset combobox text
     setIsInvoiceFormOpen(false);
   };
   
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+
+  const handleServiceProviderSelect = (employee: Employee) => {
+    form.setValue('employeeId', employee.id);
+    form.setValue('serviceProviderName', ''); // Clear manual name
+    setServiceProviderSearchText(employee.name); // Update display text
+    setServiceProviderComboboxOpen(false);
+  };
+
+  const handleServiceProviderComboboxBlur = () => {
+    // If no employeeId is set (meaning nothing was selected from list)
+    // and there is text in search, this text becomes the serviceProviderName.
+    const currentEmployeeId = form.getValues('employeeId');
+    if (!currentEmployeeId && serviceProviderSearchText.trim()) {
+      form.setValue('serviceProviderName', serviceProviderSearchText.trim());
+    } else if (!serviceProviderSearchText.trim() && !currentEmployeeId) {
+      // If text is cleared and no employee selected, clear both form fields
+      form.setValue('serviceProviderName', '');
+      form.setValue('employeeId', null);
+    }
+    // If an employeeId IS set, serviceProviderSearchText should ideally match.
+    // If it doesn't, it implies user manually changed text after selection.
+    // In this scenario, we might want to clear employeeId.
+    const selectedEmployee = employees.find(e => e.id === currentEmployeeId);
+    if (selectedEmployee && selectedEmployee.name !== serviceProviderSearchText.trim()) {
+        form.setValue('employeeId', null); // User overrode selection with manual text
+        form.setValue('serviceProviderName', serviceProviderSearchText.trim());
+    }
+
+  };
+  
+  const currentServiceProviderDisplay = watchedEmployeeId 
+    ? employees.find(e => e.id === watchedEmployeeId)?.name 
+    : watchedServiceProviderName;
 
   return (
     <div className="flex flex-col gap-6">
@@ -130,7 +172,11 @@ export default function InvoicingPage() {
         <h1 className="text-3xl font-bold font-headline tracking-tight flex items-center">
           <FileSpreadsheet className="mr-3 h-8 w-8 text-primary" /> Invoicing
         </h1>
-        <Button onClick={() => setIsInvoiceFormOpen(true)}>
+        <Button onClick={() => {
+          form.reset(); // Reset form to defaults when opening
+          setServiceProviderSearchText(""); // Clear combobox text
+          setIsInvoiceFormOpen(true);
+        }}>
           <PlusCircle className="mr-2 h-5 w-5" /> Create New Invoice
         </Button>
       </div>
@@ -176,40 +222,62 @@ export default function InvoicingPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
-
-                <FormField control={form.control} name="employeeId" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Link to Service Employee (Optional)</FormLabel>
-                    <Select 
-                      onValueChange={(value) => {
-                        field.onChange(value === NO_EMPLOYEE_SELECTED_VALUE ? null : value);
-                      }} 
-                      value={field.value === null ? NO_EMPLOYEE_SELECTED_VALUE : field.value}
+                
+                <FormItem>
+                  <FormLabel>Service Provider (Select existing or type new)</FormLabel>
+                  <Popover open={serviceProviderComboboxOpen} onOpenChange={(open) => {
+                      setServiceProviderComboboxOpen(open);
+                      if(!open) handleServiceProviderComboboxBlur(); // Apply logic when popover closes
+                  }}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={serviceProviderComboboxOpen}
+                          className={cn("w-full justify-between", !currentServiceProviderDisplay && "text-muted-foreground")}
+                        >
+                          {currentServiceProviderDisplay || "Select or type provider..."}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" 
+                        onCloseAutoFocus={(e) => e.preventDefault()} // Prevents focus shift issues
                     >
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select an employee or enter manually" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value={NO_EMPLOYEE_SELECTED_VALUE}>-- None / Enter Manually Below --</SelectItem>
-                        {employees.map(emp => (<SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.jobTitle || 'N/A'})</SelectItem>))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="serviceProviderName" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Service Provider Name (if not selected above)</FormLabel>
-                    <FormControl>
-                        <Input 
-                            placeholder="e.g., Freelancer Name, External Consultant" 
-                            {...field} 
-                            disabled={!!watchedEmployeeId} 
-                            value={watchedEmployeeId ? "" : (field.value || "")}
+                      <Command>
+                        <CommandInput
+                          placeholder="Search employee or type name..."
+                          value={serviceProviderSearchText}
+                          onValueChange={setServiceProviderSearchText}
+                          // onBlur={handleServiceProviderComboboxBlur} // Blur handled by Popover onOpenChange
                         />
-                    </FormControl>
-                    {!!watchedEmployeeId && <FormMessage>Employee selected, manual name disabled.</FormMessage>}
-                    {!watchedEmployeeId && (!field.value && !form.getValues("employeeId")) && <FormMessage>Required if no employee is selected and service is by a person.</FormMessage>}
-                  </FormItem>
-                )} />
+                        <CommandList>
+                          <CommandEmpty>No employee found. Type to add manually.</CommandEmpty>
+                          <CommandGroup>
+                            {employees.map((employee) => (
+                              <CommandItem
+                                key={employee.id}
+                                value={employee.name} // Value for CMDK filtering/selection
+                                onSelect={() => handleServiceProviderSelect(employee)}
+                              >
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    watchedEmployeeId === employee.id ? "opacity-100" : "opacity-0"
+                                  )}
+                                />
+                                {employee.name} ({employee.jobTitle || 'N/A'})
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage>{form.formState.errors.employeeId?.message || form.formState.errors.serviceProviderName?.message}</FormMessage>
+                </FormItem>
+
 
                 <div className="grid md:grid-cols-2 gap-4">
                   <FormField control={form.control} name="invoiceDate" render={({ field }) => (
@@ -316,7 +384,7 @@ export default function InvoicingPage() {
                 )} />
 
                 <div className="flex justify-end gap-2 pt-4">
-                    <Button type="button" variant="outline" onClick={() => { setIsInvoiceFormOpen(false); form.reset(); }}>Cancel</Button>
+                    <Button type="button" variant="outline" onClick={() => { setIsInvoiceFormOpen(false); form.reset(); setServiceProviderSearchText(""); }}>Cancel</Button>
                     <Button type="submit">Create Invoice</Button>
                 </div>
               </form>
