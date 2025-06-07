@@ -8,7 +8,8 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'; // FormLabel is for RHF context
+import { Label } from '@/components/ui/label'; // Plain Label for display
 import { Loader2, Mail } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { sendInvoiceEmail, type SendInvoiceEmailInput, type SendInvoiceEmailOutput } from '@/ai/flows/send-invoice-email-flow';
@@ -57,10 +58,9 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
     }
     setIsSending(true);
     try {
-      // Call the flow just to generate content first (it will also "simulate" sending)
       const result: SendInvoiceEmailOutput = await sendInvoiceEmail({
         invoiceId: invoiceData.id,
-        recipientEmail: data.recipientEmail, // Use the entered email for content generation context
+        recipientEmail: data.recipientEmail,
         customerName: invoiceData.customerName,
         invoiceNumber: invoiceData.invoiceNumber,
       });
@@ -89,8 +89,6 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
     }
     setIsSending(true);
     try {
-      // The flow was already called for preview, we could re-call it or just use the previewed content
-      // For simplicity and to ensure the "send" simulation happens with the final confirmation:
       const result: SendInvoiceEmailOutput = await sendInvoiceEmail({
         invoiceId: invoiceData.id,
         recipientEmail: form.getValues("recipientEmail"),
@@ -103,8 +101,7 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
           title: "Email Sent (Simulated)", 
           description: `Subject: "${result.emailSubject}". Email to ${form.getValues("recipientEmail")} for invoice ${invoiceData.invoiceNumber} has been simulated.`
         });
-        setStep('sent_confirmation'); // Optional: show a final confirmation screen
-        // onOpenChange(false); // Or just close
+        setStep('sent_confirmation');
       } else {
         toast({ title: "Email Not Sent", description: result.message, variant: "destructive" });
       }
@@ -120,12 +117,12 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-        if (!open && step !== 'sent_confirmation') { // Allow viewing confirmation before closing
+        if (!open && step !== 'sent_confirmation') {
              onOpenChange(false);
         } else if (!open && step === 'sent_confirmation') {
-             onOpenChange(false); // If already on confirmation, just close
+             onOpenChange(false);
         }
-        if (open && step === 'sent_confirmation') setStep('enter_email'); // Reset if re-opened
+        if (open && step === 'sent_confirmation') setStep('enter_email');
     }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
@@ -142,7 +139,7 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
             <p className="text-sm text-muted-foreground">
               Enter recipient's email for invoice <span className="font-semibold">{invoiceData.invoiceNumber}</span> for <span className="font-semibold">{invoiceData.customerName}</span>.
             </p>
-            <Form {...form}>
+            <Form {...form}> {/* This Form provider is for the recipientEmail field */}
               <form onSubmit={form.handleSubmit(handleGeneratePreview)} className="space-y-4 py-2">
                 <FormField
                   control={form.control}
@@ -176,18 +173,19 @@ export function SendInvoiceEmailDialog({ isOpen, onOpenChange, invoiceData }: Se
                     <AlertTitle>Email Preview</AlertTitle>
                     <AlertDescription>This is the content that will be simulated as sent.</AlertDescription>
                 </Alert>
-                <FormItem>
-                    <FormLabel>To:</FormLabel>
-                    <Input readOnly disabled value={form.getValues("recipientEmail")} />
-                </FormItem>
-                <FormItem>
-                    <FormLabel>Subject:</FormLabel>
-                    <Input readOnly disabled value={emailContent.subject} />
-                </FormItem>
-                <FormItem>
-                    <FormLabel>Body:</FormLabel>
-                    <Textarea readOnly disabled value={emailContent.body} rows={10} className="bg-muted/50"/>
-                </FormItem>
+                {/* Using simple div and Label for display, not FormItem/FormLabel which expect RHF context */}
+                <div className="space-y-1">
+                    <Label htmlFor="preview-to">To:</Label>
+                    <Input id="preview-to" readOnly disabled value={form.getValues("recipientEmail")} />
+                </div>
+                <div className="space-y-1">
+                    <Label htmlFor="preview-subject">Subject:</Label>
+                    <Input id="preview-subject" readOnly disabled value={emailContent.subject} />
+                </div>
+                <div className="space-y-1">
+                    <Label htmlFor="preview-body">Body:</Label>
+                    <Textarea id="preview-body" readOnly disabled value={emailContent.body} rows={10} className="bg-muted/50"/>
+                </div>
                  <DialogFooter className="pt-2">
                     <Button type="button" variant="outline" onClick={() => setStep('enter_email')} disabled={isSending}>Back</Button>
                     <Button onClick={handleSendEmail} disabled={isSending}>
@@ -242,5 +240,3 @@ function CheckCircleIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-
-    
