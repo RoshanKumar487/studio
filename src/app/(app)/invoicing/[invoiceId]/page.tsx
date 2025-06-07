@@ -225,7 +225,7 @@ export default function InvoiceDetailPage() {
                 Thank you for your business!
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-                Powered by BizView
+                Powered by FlowHQ
             </p>
         </CardFooter>
       </Card>

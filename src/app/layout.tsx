@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AppDataProvider } from '@/context/app-data-context'; // Import AppDataProvider
 
 export const metadata: Metadata = {
-  title: 'BizView',
+  title: 'FlowHQ',
   description: 'Basic ERP for small businesses by Firebase Studio',
 };
 
