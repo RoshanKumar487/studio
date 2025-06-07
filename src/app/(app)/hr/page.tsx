@@ -18,13 +18,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from '@/components/shared/date-picker';
-import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning, Sparkles, Loader2 } from 'lucide-react';
+import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Image from 'next/image';
-import { addEmployeeByText, type AddEmployeeByTextInput, type AddEmployeeByTextOutput } from '@/ai/flows/add-employee-by-text-flow';
 
 const employmentTypes = ['Full-time', 'Part-time', 'Contract'] as const;
 
@@ -57,11 +56,6 @@ export default function HrPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
-  const [aiEmployeeText, setAiEmployeeText] = useState("");
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiEmployeeResult, setAiEmployeeResult] = useState<AddEmployeeByTextOutput | null>(null);
-
-
   const employeeForm = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
     defaultValues: { name: '', email: '', jobTitle: '', startDate: null, employmentType: undefined },
@@ -88,47 +82,12 @@ export default function HrPage() {
         employeeForm.reset({ name: '', email: '', jobTitle: '', startDate: null, employmentType: undefined });
         setIsEmployeeFormOpen(false);
         } else {
-        // This case might not be hit if addEmployee throws an error for failure
         toast({ title: "Error", description: `Failed to add employee ${data.name}.`, variant: "destructive" });
         }
     } catch (error: any) {
         toast({ title: "Error Adding Employee", description: error.message || `Failed to add employee ${data.name}.`, variant: "destructive" });
     }
   };
-
-  const handleAiAddEmployee = async () => {
-    if (!aiEmployeeText.trim()) {
-      toast({ title: "Input Required", description: "Please provide text to describe the employee.", variant: "destructive" });
-      return;
-    }
-    setIsAiLoading(true);
-    setAiEmployeeResult(null);
-    try {
-      const result = await addEmployeeByText({ employeeText: aiEmployeeText });
-      setAiEmployeeResult(result);
-      if (result.success && result.name) {
-        const employeeData: Omit<Employee, 'id' | 'documents'> = {
-          name: result.name,
-          email: result.email || undefined,
-          jobTitle: result.jobTitle || undefined,
-          startDate: result.startDate ? parseISO(result.startDate) : null,
-          employmentType: result.employmentType || undefined,
-        };
-        await addEmployee(employeeData); // This function now throws on error
-        toast({ title: "Employee Added via AI", description: `${result.name} has been successfully added.` });
-        setAiEmployeeText(""); 
-      } else {
-        toast({ title: "AI Processing Issue", description: result.message || "Could not add employee from text.", variant: "destructive" });
-      }
-    } catch (error: any) {
-      console.error("AI Add Employee Error:", error);
-      toast({ title: "Error", description: error.message || "Failed to add employee using AI. Please try again.", variant: "destructive" });
-       setAiEmployeeResult({success: false, message: error.message || "An unexpected error occurred."});
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-
 
   const onDocumentSubmit: SubmitHandler<DocumentFormData> = async (data) => {
     if (selectedEmployee) {
@@ -147,7 +106,7 @@ export default function HrPage() {
             URL.revokeObjectURL(imagePreviewUrl);
             setImagePreviewUrl(null);
         }
-        const updatedEmployee = await getEmployeeById(selectedEmployee.id); // Re-fetch to update UI
+        const updatedEmployee = await getEmployeeById(selectedEmployee.id); 
         setSelectedEmployee(updatedEmployee || null);
       } catch (error: any) {
         toast({ title: "Error Adding Document", description: error.message || "Failed to add document record.", variant: "destructive" });
@@ -185,7 +144,7 @@ export default function HrPage() {
       try {
         await deleteEmployeeDocument(documentToDelete.empId, documentToDelete.docId);
         toast({ title: "Document Deleted", description: `Document '${documentToDelete.docName}' has been deleted.` });
-        const updatedEmployee = await getEmployeeById(selectedEmployee.id); // Re-fetch
+        const updatedEmployee = await getEmployeeById(selectedEmployee.id); 
         setSelectedEmployee(updatedEmployee || null);
         setDocumentToDelete(null); 
       } catch (error: any) {
@@ -296,31 +255,6 @@ export default function HrPage() {
           </DialogContent>
         </Dialog>
       </div>
-
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="font-headline flex items-center gap-2"><Sparkles className="h-6 w-6 text-primary" /> AI Employee Assistant</CardTitle>
-          <CardDescription>Describe the new employee in plain text. The AI will try to extract the details and add them.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Textarea
-            placeholder="e.g., Add John Smith, email john.s@work.co, senior manager, starts next Tuesday, full-time."
-            value={aiEmployeeText}
-            onChange={(e) => setAiEmployeeText(e.target.value)}
-            rows={3}
-          />
-          <Button onClick={handleAiAddEmployee} disabled={isAiLoading}>
-            {isAiLoading ? <Loader2 className="animate-spin" /> : <Sparkles />}
-            {isAiLoading ? 'Processing...' : 'Add Employee with AI'}
-          </Button>
-          {aiEmployeeResult && !aiEmployeeResult.success && (
-            <Alert variant="destructive">
-              <AlertTitle>AI Error</AlertTitle>
-              <AlertDescription>{aiEmployeeResult.message}</AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
 
       <Card className="shadow-lg">
         <CardHeader>
@@ -573,3 +507,5 @@ export default function HrPage() {
     </div>
   );
 }
+
+    

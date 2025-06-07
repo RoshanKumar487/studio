@@ -28,7 +28,7 @@ const navItems = [
   { href: '/expenses', label: 'Expenses', icon: TrendingDown },
   { href: '/hr', label: 'HR & Employees', icon: Users },
   { href: '/invoicing', label: 'Invoicing', icon: FileSpreadsheet },
-  { href: '/ai-scheduler', label: 'AI Scheduler', icon: Sparkles },
+  { href: '/ai-assistant', label: 'AI Assistant', icon: Sparkles },
 ];
 
 function AppLayoutContent({ children, pathname }: { children: ReactNode; pathname: string }) {
@@ -100,3 +100,5 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     </AppDataProvider>
   );
 }
+
+    
