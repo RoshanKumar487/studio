@@ -11,7 +11,8 @@ let staticInvoicesList: Invoice[] = [ // A copy for local manipulation
     { 
         id: 'static-inv-1', invoiceNumber: 'INV-2024-0001', companyName: 'Mock Company', customerName: 'Mock Customer A', 
         invoiceDate: new Date(2024, 5, 10), dueDate: new Date(2024, 6, 10),
-        lineItems: [{ id: 'li-1', description: 'Mock Service 1', quantity: 1, unitPrice: 100, total: 100 }],
+        lineItems: [{ id: 'li-1', description: 'Mock Service 1', quantity: 1, unitPrice: 100, total: 100, customColumnValue: 'Some detail' }],
+        customColumnHeader: 'Extra Info',
         subTotal: 100, taxRate: 0.1, taxAmount: 10, grandTotal: 110, status: 'Draft'
     },
 ];
@@ -40,6 +41,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             ...staticInvoice,
             invoiceDate: staticInvoice.invoiceDate.toISOString(),
             dueDate: staticInvoice.dueDate.toISOString(),
+            lineItems: staticInvoice.lineItems.map(li => ({...li, customColumnValue: li.customColumnValue || ''})),
+            customColumnHeader: staticInvoice.customColumnHeader || '',
         });
       }
       return res.status(404).json({ message: `Invoice ${invoiceId} not found (mocked).` });
@@ -54,6 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             quantity: Number(item.quantity) || 0,
             unitPrice: Number(item.unitPrice) || 0,
             total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+            customColumnValue: item.customColumnValue || undefined,
         }));
         const subTotal = updatedLineItems.reduce((sum, item) => sum + item.total, 0);
         const taxRate = updateData.taxRate !== undefined ? Number(updateData.taxRate) : staticInvoice.taxRate;
@@ -66,6 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             invoiceDate: updateData.invoiceDate ? new Date(updateData.invoiceDate) : staticInvoice.invoiceDate,
             dueDate: updateData.dueDate ? new Date(updateData.dueDate) : staticInvoice.dueDate,
             lineItems: updatedLineItems,
+            customColumnHeader: updateData.customColumnHeader === '' ? undefined : (updateData.customColumnHeader || staticInvoice.customColumnHeader),
             subTotal,
             taxRate,
             taxAmount,
@@ -106,6 +111,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           id: invoice._id!.toString(),
           invoiceDate: new Date(invoice.invoiceDate),
           dueDate: new Date(invoice.dueDate),
+          lineItems: invoice.lineItems.map(li => ({...li, customColumnValue: li.customColumnValue || undefined})),
+          customColumnHeader: invoice.customColumnHeader || undefined,
         } as Invoice);
       } else {
         res.status(404).json({ message: 'Invoice not found' });
@@ -113,12 +120,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else if (req.method === 'PUT') {
       const updateData = req.body as Partial<Omit<Invoice, 'id' | 'invoiceNumber'>>;
       
-      const { lineItems, taxRate: newTaxRate, ...otherUpdates } = updateData;
+      const { lineItems, taxRate: newTaxRate, customColumnHeader, ...otherUpdates } = updateData;
 
       const updateFields: any = { ...otherUpdates };
 
       if (otherUpdates.invoiceDate) updateFields.invoiceDate = new Date(otherUpdates.invoiceDate);
       if (otherUpdates.dueDate) updateFields.dueDate = new Date(otherUpdates.dueDate);
+      
+      // Handle customColumnHeader explicitly to allow setting it to empty string (which means undefined in DB)
+      if (customColumnHeader === '') {
+        updateFields.customColumnHeader = undefined;
+      } else if (customColumnHeader !== undefined) {
+        updateFields.customColumnHeader = customColumnHeader;
+      }
+
 
       const currentInvoice = await invoicesCollection.findOne({ _id: objectId });
       if (!currentInvoice) {
@@ -131,6 +146,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.unitPrice) || 0,
         total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+        customColumnValue: item.customColumnValue || undefined,
       }));
       updateFields.lineItems = finalLineItems;
 
@@ -150,7 +166,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
 
       if (updateResult.matchedCount === 0) {
-        // This case should be caught by currentInvoice check above, but good for safety
         return res.status(404).json({ message: 'Invoice not found during update operation.' });
       }
       const updatedInvoiceDoc = await invoicesCollection.findOne({ _id: objectId });
@@ -162,6 +177,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           id: updatedInvoiceDoc._id!.toString(),
           invoiceDate: new Date(updatedInvoiceDoc.invoiceDate),
           dueDate: new Date(updatedInvoiceDoc.dueDate),
+          lineItems: updatedInvoiceDoc.lineItems.map(li => ({...li, customColumnValue: li.customColumnValue || undefined})),
+          customColumnHeader: updatedInvoiceDoc.customColumnHeader || undefined,
       } as Invoice);
     } else {
       res.setHeader('Allow', ['GET', 'PUT']);

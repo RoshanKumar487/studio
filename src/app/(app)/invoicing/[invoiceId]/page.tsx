@@ -177,9 +177,12 @@ export default function InvoiceDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[55%]">DESCRIPTION</TableHead>
+                  <TableHead className="w-[50%]">DESCRIPTION</TableHead>
                   <TableHead className="text-center">QTY</TableHead>
                   <TableHead className="text-right">UNIT PRICE</TableHead>
+                  {invoice.customColumnHeader && (
+                    <TableHead className="text-left">{invoice.customColumnHeader}</TableHead>
+                  )}
                   <TableHead className="text-right">TOTAL</TableHead>
                 </TableRow>
               </TableHeader>
@@ -189,6 +192,9 @@ export default function InvoiceDetailPage() {
                     <TableCell className="font-medium">{item.description}</TableCell>
                     <TableCell className="text-center">{item.quantity}</TableCell>
                     <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
+                    {invoice.customColumnHeader && (
+                      <TableCell className="text-left">{item.customColumnValue || ''}</TableCell>
+                    )}
                     <TableCell className="text-right font-medium">{formatCurrency(item.total)}</TableCell>
                   </TableRow>
                 ))}
@@ -252,4 +258,3 @@ export default function InvoiceDetailPage() {
     </div>
   );
 }
-

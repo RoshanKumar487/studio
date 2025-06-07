@@ -16,7 +16,8 @@ let staticInvoices: Invoice[] = [
     { 
         id: 'static-inv-1', invoiceNumber: 'INV-2024-0001', companyName: 'Mock Company', customerName: 'Mock Customer A', 
         invoiceDate: new Date(2024, 5, 10), dueDate: new Date(2024, 6, 10),
-        lineItems: [{ id: uuidv4(), description: 'Mock Service 1', quantity: 1, unitPrice: 100, total: 100 }],
+        lineItems: [{ id: uuidv4(), description: 'Mock Service 1', quantity: 1, unitPrice: 100, total: 100, customColumnValue: 'Mock custom data' }],
+        customColumnHeader: 'Details',
         subTotal: 100, taxRate: 0.1, taxAmount: 10, grandTotal: 110, status: 'Draft'
     },
 ];
@@ -39,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })));
     }
     if (req.method === 'POST') {
-      const { companyName, customerName, invoiceDate, dueDate, lineItems, taxRate, status, employeeId, serviceProviderName, notes, companyAddress, customerAddress } = req.body as Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>;
+      const { companyName, customerName, invoiceDate, dueDate, lineItems, customColumnHeader, taxRate, status, employeeId, serviceProviderName, notes, companyAddress, customerAddress } = req.body as Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>;
       
       if (!companyName || !customerName || !invoiceDate || !dueDate || !lineItems || taxRate == null) {
         return res.status(400).json({ message: 'Missing required fields for mock invoice.' });
@@ -54,6 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.unitPrice) || 0,
         total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+        customColumnValue: item.customColumnValue || undefined,
       }));
       const subTotal = parsedLineItems.reduce((sum, item) => sum + item.total, 0);
       const taxAmount = subTotal * (Number(taxRate) || 0);
@@ -66,12 +68,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         invoiceDate: new Date(invoiceDate),
         dueDate: new Date(dueDate),
         lineItems: parsedLineItems,
+        customColumnHeader: customColumnHeader || undefined,
         taxRate: Number(taxRate),
         status: status || 'Draft',
         employeeId, serviceProviderName,
         subTotal, taxAmount, grandTotal,
       };
-      staticInvoices.push(newMockInvoice); // Add to mock list for subsequent mock GETs
+      staticInvoices.push(newMockInvoice); 
       return res.status(201).json({
           ...newMockInvoice,
           invoiceDate: newMockInvoice.invoiceDate.toISOString(),
@@ -96,13 +99,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: inv._id!.toString(),
         invoiceDate: new Date(inv.invoiceDate),
         dueDate: new Date(inv.dueDate),
-        lineItems: inv.lineItems.map(li => ({...li, id: li.id || uuidv4()})), // ensure line item IDs
+        lineItems: inv.lineItems.map(li => ({...li, id: li.id || uuidv4(), customColumnValue: li.customColumnValue || undefined})), 
+        customColumnHeader: inv.customColumnHeader || undefined,
       }));
       res.status(200).json(resultInvoices);
     } else if (req.method === 'POST') {
-      const { companyName, customerName, invoiceDate, dueDate, lineItems, taxRate, status, employeeId, serviceProviderName, notes, companyAddress, customerAddress } = req.body as Omit<Invoice, 'id' | 'subTotal' | 'taxAmount' | 'grandTotal'>;
+      const { companyName, customerName, invoiceDate, dueDate, lineItems, customColumnHeader, taxRate, status, employeeId, serviceProviderName, notes, companyAddress, customerAddress } = req.body as Omit<Invoice, 'id' | 'subTotal' | 'taxAmount' | 'grandTotal'>;
 
-      // Validate required fields
       if (!companyName || !customerName || !invoiceDate || !dueDate || !lineItems || taxRate == null ) {
           return res.status(400).json({ message: 'Missing required fields for invoice.' });
       }
@@ -114,10 +117,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const parsedLineItems: InvoiceLineItem[] = lineItems.map(item => ({
         ...item,
-        id: item.id || uuidv4(), // Ensure ID for line items
+        id: item.id || uuidv4(), 
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.unitPrice) || 0,
         total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+        customColumnValue: item.customColumnValue || undefined,
       }));
       const subTotal = parsedLineItems.reduce((sum, item) => sum + item.total, 0);
       const numericTaxRate = Number(taxRate) || 0;
@@ -130,6 +134,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         invoiceDate: new Date(invoiceDate),
         dueDate: new Date(dueDate),
         lineItems: parsedLineItems,
+        customColumnHeader: customColumnHeader || undefined,
         taxRate: numericTaxRate,
         subTotal, taxAmount, grandTotal,
         status: status || 'Draft',
@@ -157,4 +162,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 }
-

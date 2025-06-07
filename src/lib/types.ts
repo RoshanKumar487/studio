@@ -45,6 +45,7 @@ export interface InvoiceLineItem {
   quantity: number;
   unitPrice: number;
   total: number;
+  customColumnValue?: string; // Value for the single custom column
 }
 
 export interface Invoice {
@@ -59,6 +60,7 @@ export interface Invoice {
   invoiceDate: Date;
   dueDate: Date;
   lineItems: InvoiceLineItem[];
+  customColumnHeader?: string; // Header for the single custom column for line items
   subTotal: number;
   taxRate: number; // e.g., 0.1 for 10%
   taxAmount: number;

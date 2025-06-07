@@ -150,7 +150,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const payload = {
         ...entry,
         date: typeof entry.date === 'string' ? entry.date : entry.date.toISOString(),
-        // Ensure optional fields are present or explicitly undefined if not provided by `entry`
         documentFileName: entry.documentFileName || undefined,
         documentFileType: entry.documentFileType || undefined,
         documentFileSize: entry.documentFileSize || undefined,
@@ -302,7 +301,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ...invoiceData,
       invoiceDate: typeof invoiceData.invoiceDate === 'string' ? invoiceData.invoiceDate : invoiceData.invoiceDate.toISOString(),
       dueDate: typeof invoiceData.dueDate === 'string' ? invoiceData.dueDate : invoiceData.dueDate.toISOString(),
-      invoiceNumber: getNextInvoiceNumber()
+      invoiceNumber: getNextInvoiceNumber(),
+      customColumnHeader: invoiceData.customColumnHeader || undefined,
+      lineItems: invoiceData.lineItems.map(li => ({...li, customColumnValue: li.customColumnValue || undefined})),
     };
     try {
       const response = await fetch('/api/invoices', {
@@ -329,7 +330,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoadingInvoices(false);
     }
-  }, [toast, getNextInvoiceNumber, invoices]); // Added invoices to dependency array for getNextInvoiceNumber
+  }, [toast, getNextInvoiceNumber, invoices]); 
 
   const updateInvoice = useCallback(async (invoiceId: string, invoiceData: Partial<Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>>): Promise<Invoice | null> => {
     setLoadingInvoices(true);
@@ -337,6 +338,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       ...invoiceData,
       invoiceDate: invoiceData.invoiceDate ? (typeof invoiceData.invoiceDate === 'string' ? invoiceData.invoiceDate : (invoiceData.invoiceDate as Date).toISOString()) : undefined,
       dueDate: invoiceData.dueDate ? (typeof invoiceData.dueDate === 'string' ? invoiceData.dueDate : (invoiceData.dueDate as Date).toISOString()) : undefined,
+      customColumnHeader: invoiceData.customColumnHeader || undefined,
+      lineItems: invoiceData.lineItems?.map(li => ({...li, customColumnValue: li.customColumnValue || undefined})),
     };
     try {
       const response = await fetch(`/api/invoices/${invoiceId}`, {
@@ -377,7 +380,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`/api/invoices/${invoiceId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }), // Only send status for status-specific update
+        body: JSON.stringify({ status }), 
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({message: `Failed to update invoice status (Status: ${response.status})`}));

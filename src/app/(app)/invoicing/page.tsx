@@ -34,7 +34,8 @@ const lineItemSchema = z.object({
   description: z.string().min(1, "Description is required"),
   quantity: z.coerce.number().min(0.1, "Quantity must be positive"),
   unitPrice: z.coerce.number().min(0.01, "Unit price must be positive"),
-  total: z.coerce.number().optional() 
+  total: z.coerce.number().optional(),
+  customColumnValue: z.string().optional().or(z.literal('')),
 });
 
 const invoiceSchema = z.object({
@@ -47,6 +48,7 @@ const invoiceSchema = z.object({
   invoiceDate: z.date({ required_error: "Invoice date is required."}),
   dueDate: z.date({ required_error: "Due date is required."}),
   lineItems: z.array(lineItemSchema).min(1, "At least one line item is required."),
+  customColumnHeader: z.string().max(50, "Custom column header too long.").optional().or(z.literal('')),
   taxRate: z.coerce.number().min(0).max(1).default(0), 
   notes: z.string().optional(),
   status: z.enum(['Draft', 'Sent', 'Paid', 'Overdue']).default('Draft'),
@@ -63,7 +65,8 @@ const defaultFormValues: InvoiceFormData = {
     customerAddress: '',
     invoiceDate: new Date(),
     dueDate: addDays(new Date(), 30),
-    lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
+    lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0, customColumnValue: '' }],
+    customColumnHeader: '',
     taxRate: 0,
     notes: '',
     status: 'Draft',
@@ -100,6 +103,7 @@ export default function InvoicingPage() {
   const watchedLineItems = form.watch("lineItems");
   const watchedEmployeeId = form.watch("employeeId");
   const watchedServiceProviderName = form.watch("serviceProviderName");
+  const watchedCustomColumnHeader = form.watch("customColumnHeader");
 
   useEffect(() => {
     if (watchedEmployeeId) {
@@ -118,9 +122,10 @@ export default function InvoicingPage() {
         ...invoiceToEdit,
         invoiceDate: invoiceToEdit.invoiceDate ? new Date(invoiceToEdit.invoiceDate) : new Date(),
         dueDate: invoiceToEdit.dueDate ? new Date(invoiceToEdit.dueDate) : addDays(new Date(), 30),
-        lineItems: invoiceToEdit.lineItems.map(li => ({...li})), // Ensure new array of objects
+        lineItems: invoiceToEdit.lineItems.map(li => ({...li, customColumnValue: li.customColumnValue || ''})),
         employeeId: invoiceToEdit.employeeId || null,
         serviceProviderName: invoiceToEdit.serviceProviderName || '',
+        customColumnHeader: invoiceToEdit.customColumnHeader || '',
       });
       // Set combobox text
       if (invoiceToEdit.employeeId) {
@@ -147,10 +152,12 @@ export default function InvoicingPage() {
       ...data,
       employeeId: data.employeeId || undefined,
       serviceProviderName: data.employeeId ? undefined : (data.serviceProviderName || undefined),
+      customColumnHeader: data.customColumnHeader?.trim() || undefined,
       lineItems: data.lineItems.map(item => ({
         ...item,
-        id: item.id || uuidv4(), // Ensure ID for new line items
+        id: item.id || uuidv4(), 
         total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+        customColumnValue: item.customColumnValue?.trim() || undefined,
       })),
     };
 
@@ -224,7 +231,6 @@ export default function InvoicingPage() {
   const filteredInvoices = useMemo(() => {
     return invoices.filter(invoice => {
       let isMatch = true;
-      // invoice.invoiceDate is already a Date object from AppDataContext
       const invoiceDateOnly = startOfDay(invoice.invoiceDate); 
 
       if (filterStartDate) {
@@ -251,7 +257,7 @@ export default function InvoicingPage() {
           <FileSpreadsheet className="mr-3 h-8 w-8 text-primary" /> Invoicing
         </h1>
         <Button onClick={() => {
-          resetFormAndState(); // Ensures form is clean for new entry
+          resetFormAndState(); 
           setIsInvoiceFormOpen(true);
         }}>
           <PlusCircle className="mr-2 h-5 w-5" /> Create New Invoice
@@ -423,8 +429,15 @@ export default function InvoicingPage() {
 
                 <Separator className="my-6" />
                 <CardTitle className="text-xl pt-4 font-headline">Line Items</CardTitle>
+                <FormField control={form.control} name="customColumnHeader" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Custom Column Header (Optional)</FormLabel>
+                    <FormControl><Input placeholder="e.g., Notes, Part No." {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 {fields.map((item, index) => (
-                  <div key={item.id} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 items-end p-3 border rounded-md">
+                  <div key={item.id} className={`grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr${watchedCustomColumnHeader ? '_1fr' : ''}_auto] gap-2 items-end p-3 border rounded-md`}>
                     <FormField control={form.control} name={`lineItems.${index}.description`} render={({ field }) => (
                       <FormItem><FormLabel>Description</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
@@ -456,6 +469,11 @@ export default function InvoicingPage() {
                         <FormMessage />
                       </FormItem>
                     )} />
+                    {watchedCustomColumnHeader && (
+                      <FormField control={form.control} name={`lineItems.${index}.customColumnValue`} render={({ field }) => (
+                        <FormItem><FormLabel>{watchedCustomColumnHeader}</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
+                      )} />
+                    )}
                     <FormItem>
                         <FormLabel>Total</FormLabel>
                         <Input 
@@ -471,7 +489,7 @@ export default function InvoicingPage() {
                     </Button>
                   </div>
                 ))}
-                <Button type="button" variant="outline" onClick={() => append({ description: '', quantity: 1, unitPrice: 0, total: 0 })}>
+                <Button type="button" variant="outline" onClick={() => append({ description: '', quantity: 1, unitPrice: 0, total: 0, customColumnValue: '' })}>
                   <PlusCircle className="mr-2 h-4 w-4" /> Add Line Item
                 </Button>
                 
@@ -613,4 +631,3 @@ export default function InvoicingPage() {
     </div>
   );
 }
-
