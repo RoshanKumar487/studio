@@ -384,7 +384,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({message: `Failed to update invoice status (Status: ${response.status})`}));
-        throw new Error(errorData.message || `Failed to update invoice status (Status: ${response.status})`);
+        toast({ title: "Error Updating Invoice Status", description: errorData.message || "Could not update invoice status.", variant: "destructive"});
+        return; // Return early if API call failed
       }
       const updatedInvoice: Invoice = await response.json();
       setInvoices(prevInvoices => 
@@ -398,7 +399,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         console.error("Error updating invoice status:", error);
         toast({ title: "Error Updating Invoice Status", description: error.message || "Could not update invoice status.", variant: "destructive"});
     } finally {
-      setLoadingInvoices(false);
+      setLoadingInvoices(false); // Ensure loading is set to false in all cases
     }
   }, [toast]);
 

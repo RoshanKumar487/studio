@@ -5,11 +5,10 @@ import { MongoClient, ObjectId, ServerApiVersion } from 'mongodb';
 import type { Invoice, InvoiceLineItem } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 
-// Use the staticInvoices from the index API for mocking if needed.
-// This is a simplified approach; in a real app, you might share mock data logic.
-let staticInvoicesList: Invoice[] = [ // A copy for local manipulation
-    { 
-        id: 'static-inv-1', invoiceNumber: 'INV-2024-0001', companyName: 'Mock Company', customerName: 'Mock Customer A', 
+// A copy for local manipulation if needed by the mock logic
+let staticInvoicesList: Invoice[] = [
+    {
+        id: 'static-inv-1', invoiceNumber: 'INV-2024-0001', companyName: 'Mock Company', customerName: 'Mock Customer A',
         invoiceDate: new Date(2024, 5, 10), dueDate: new Date(2024, 6, 10),
         lineItems: [{ id: 'li-1', description: 'Mock Service 1', quantity: 1, unitPrice: 100, total: 100, customColumnValue: 'Some detail' }],
         customColumnHeader: 'Extra Info',
@@ -48,42 +47,80 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ message: `Invoice ${invoiceId} not found (mocked).` });
     }
     if (req.method === 'PUT') {
-      if (staticInvoice) {
-        const updateData = req.body as Partial<Omit<Invoice, 'id' | 'invoiceNumber'>>;
-        
-        const updatedLineItems = (updateData.lineItems || staticInvoice.lineItems).map(item => ({
-            ...item,
-            id: item.id || uuidv4(),
-            quantity: Number(item.quantity) || 0,
-            unitPrice: Number(item.unitPrice) || 0,
-            total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
-            customColumnValue: item.customColumnValue || undefined,
-        }));
-        const subTotal = updatedLineItems.reduce((sum, item) => sum + item.total, 0);
-        const taxRate = updateData.taxRate !== undefined ? Number(updateData.taxRate) : staticInvoice.taxRate;
-        const taxAmount = subTotal * taxRate;
-        const grandTotal = subTotal + taxAmount;
+      const updatePayload = req.body as Partial<Invoice>; // Can be just { status: 'Paid' } or a full update
 
-        const updatedMockInvoice: Invoice = {
-            ...staticInvoice,
-            ...updateData,
-            invoiceDate: updateData.invoiceDate ? new Date(updateData.invoiceDate) : staticInvoice.invoiceDate,
-            dueDate: updateData.dueDate ? new Date(updateData.dueDate) : staticInvoice.dueDate,
-            lineItems: updatedLineItems,
-            customColumnHeader: updateData.customColumnHeader === '' ? undefined : (updateData.customColumnHeader || staticInvoice.customColumnHeader),
-            subTotal,
-            taxRate,
-            taxAmount,
-            grandTotal,
-            status: updateData.status || staticInvoice.status,
+      if (staticInvoice) { // Invoice found in the hardcoded list
+        const originalInvoice = staticInvoice; // staticInvoice is already the found one
+        const updatedInvoice: Invoice = {
+          ...originalInvoice,
+          ...updatePayload,
+          id: originalInvoice.id, // Ensure ID is not overwritten by payload if not present
+          invoiceNumber: updatePayload.invoiceNumber || originalInvoice.invoiceNumber, // Ensure invoiceNumber is not overwritten if not in payload
+          invoiceDate: updatePayload.invoiceDate ? new Date(updatePayload.invoiceDate) : originalInvoice.invoiceDate,
+          dueDate: updatePayload.dueDate ? new Date(updatePayload.dueDate) : originalInvoice.dueDate,
         };
-        staticInvoicesList[staticInvoiceIndex] = updatedMockInvoice;
+
+        const finalLineItems = (updatePayload.lineItems || originalInvoice.lineItems).map(li => ({ ...li, id: li.id || uuidv4(), total: (Number(li.quantity) || 0) * (Number(li.unitPrice) || 0) }));
+        const subTotal = finalLineItems.reduce((sum, item) => sum + item.total, 0);
+        const taxRate = updatePayload.taxRate !== undefined ? Number(updatePayload.taxRate) : originalInvoice.taxRate;
+        updatedInvoice.lineItems = finalLineItems;
+        updatedInvoice.subTotal = subTotal;
+        updatedInvoice.taxRate = taxRate;
+        updatedInvoice.taxAmount = subTotal * taxRate;
+        updatedInvoice.grandTotal = subTotal + updatedInvoice.taxAmount;
+        
+        staticInvoicesList[staticInvoiceIndex] = updatedInvoice; // Update the local static list
         return res.status(200).json({
-            ...updatedMockInvoice,
-            invoiceDate: updatedMockInvoice.invoiceDate.toISOString(),
-            dueDate: updatedMockInvoice.dueDate.toISOString(),
+          ...updatedInvoice,
+          invoiceDate: updatedInvoice.invoiceDate.toISOString(),
+          dueDate: updatedInvoice.dueDate.toISOString(),
+        });
+      } else if (invoiceId.startsWith('static-inv-')) {
+        // Invoice NOT in hardcoded list, but looks like a dynamically created mock ID.
+        // This invoice was likely created by POST /api/invoices (which has its own static list).
+        // For a PUT, we simulate a successful update by constructing a plausible response.
+        console.warn(`Mock PUT: Invoice ${invoiceId} not in local static list of [invoiceId].ts, but recognized as mock. Simulating update.`);
+        
+        const simulatedBase: Invoice = {
+            id: invoiceId,
+            invoiceNumber: `INV-MOCK-${invoiceId.slice(-4)}`, // Generate a plausible invoice number
+            companyName: 'Dynamic Mock Company',
+            customerName: 'Dynamic Mock Customer',
+            invoiceDate: new Date(),
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Default due 30 days
+            lineItems: [{ id: uuidv4(), description: 'Dynamic Mock Item', quantity: 1, unitPrice: 100, total: 100 }],
+            taxRate: 0.1,
+            status: 'Draft',
+            subTotal: 100,
+            taxAmount: 10,
+            grandTotal: 110,
+        };
+
+        const mergedInvoice: Invoice = {
+          ...simulatedBase, // Provide defaults for fields not in updatePayload
+          ...updatePayload, // Apply the actual update data (e.g., new status)
+          id: invoiceId, // Crucially, keep the ID from the request
+          invoiceDate: updatePayload.invoiceDate ? new Date(updatePayload.invoiceDate) : simulatedBase.invoiceDate,
+          dueDate: updatePayload.dueDate ? new Date(updatePayload.dueDate) : simulatedBase.dueDate,
+        };
+
+        // Recalculate totals based on potentially updated lineItems or taxRate from updatePayload
+        const finalLineItems = (updatePayload.lineItems || mergedInvoice.lineItems).map(li => ({ ...li, id: li.id || uuidv4(), total: (Number(li.quantity) || 0) * (Number(li.unitPrice) || 0) }));
+        const subTotal = finalLineItems.reduce((sum, item) => sum + item.total, 0);
+        const taxRate = updatePayload.taxRate !== undefined ? Number(updatePayload.taxRate) : mergedInvoice.taxRate;
+        mergedInvoice.lineItems = finalLineItems;
+        mergedInvoice.subTotal = subTotal;
+        mergedInvoice.taxRate = taxRate;
+        mergedInvoice.taxAmount = subTotal * taxRate;
+        mergedInvoice.grandTotal = subTotal + mergedInvoice.taxAmount;
+
+        return res.status(200).json({
+          ...mergedInvoice,
+          invoiceDate: mergedInvoice.invoiceDate.toISOString(),
+          dueDate: mergedInvoice.dueDate.toISOString(),
         });
       }
+      // If not in hardcoded list AND not a dynamic mock pattern, then it's truly not found
       return res.status(404).json({ message: `Invoice ${invoiceId} not found for mock update.` });
     }
     res.setHeader('Allow', ['GET', 'PUT']);
@@ -127,13 +164,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (otherUpdates.invoiceDate) updateFields.invoiceDate = new Date(otherUpdates.invoiceDate);
       if (otherUpdates.dueDate) updateFields.dueDate = new Date(otherUpdates.dueDate);
       
-      // Handle customColumnHeader explicitly to allow setting it to empty string (which means undefined in DB)
       if (customColumnHeader === '') {
         updateFields.customColumnHeader = undefined;
       } else if (customColumnHeader !== undefined) {
         updateFields.customColumnHeader = customColumnHeader;
       }
-
 
       const currentInvoice = await invoicesCollection.findOne({ _id: objectId });
       if (!currentInvoice) {
@@ -166,11 +201,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       );
 
       if (updateResult.matchedCount === 0) {
+        // This case should ideally be caught by currentInvoice check above, but good for safety
         return res.status(404).json({ message: 'Invoice not found during update operation.' });
       }
       const updatedInvoiceDoc = await invoicesCollection.findOne({ _id: objectId });
        if (!updatedInvoiceDoc) {
-          return res.status(404).json({ message: 'Updated invoice not found after update operation.'});
+          return res.status(404).json({ message: 'Updated invoice not found after update operation.'}); // Should not happen if update succeeded
       }
       res.status(200).json({
           ...updatedInvoiceDoc,
