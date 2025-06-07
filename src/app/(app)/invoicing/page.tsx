@@ -25,6 +25,9 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { cn } from '@/lib/utils';
 import { SendInvoiceEmailDialog } from '@/components/shared/send-invoice-email-dialog';
 import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { v4 as uuidv4 } from 'uuid';
+
 
 const lineItemSchema = z.object({
   id: z.string().optional(), 
@@ -221,7 +224,7 @@ export default function InvoicingPage() {
   const filteredInvoices = useMemo(() => {
     return invoices.filter(invoice => {
       let isMatch = true;
-      const invoiceDateOnly = startOfDay(invoice.invoiceDate);
+      const invoiceDateOnly = startOfDay(parseISO(invoice.invoiceDate as unknown as string)); // API returns string, context converts to Date
 
       if (filterStartDate) {
         if (invoiceDateOnly < startOfDay(filterStartDate)) isMatch = false;
@@ -545,8 +548,8 @@ export default function InvoicingPage() {
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
                     <TableCell>{invoice.customerName}</TableCell>
-                    <TableCell>{format(invoice.invoiceDate, "PPP")}</TableCell>
-                    <TableCell>{format(invoice.dueDate, "PPP")}</TableCell>
+                    <TableCell>{format(parseISO(invoice.invoiceDate as unknown as string), "PPP")}</TableCell>
+                    <TableCell>{format(parseISO(invoice.dueDate as unknown as string), "PPP")}</TableCell>
                     <TableCell>{formatCurrency(invoice.grandTotal)}</TableCell>
                     <TableCell>
                         <span className={`px-2 py-1 text-xs rounded-full ${
@@ -558,16 +561,39 @@ export default function InvoicingPage() {
                         {invoice.status}
                         </span>
                     </TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button asChild variant="outline" size="sm">
-                        <Link href={`/invoicing/${invoice.id}`}><Eye className="mr-2 h-4 w-4" /> View</Link>
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleOpenEditForm(invoice.id)}>
-                        <Pencil className="mr-2 h-4 w-4" /> Edit
-                      </Button>
-                       <Button variant="outline" size="sm" onClick={() => handleOpenEmailDialog(invoice)}>
-                        <Mail className="mr-2 h-4 w-4" /> Email
-                      </Button>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end space-x-1">
+                        <TooltipProvider delayDuration={100}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button asChild variant="outline" size="icon" className="h-8 w-8">
+                                <Link href={`/invoicing/${invoice.id}`} aria-label="View invoice">
+                                  <Eye className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>View Invoice</p></TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEditForm(invoice.id)} aria-label="Edit invoice">
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Edit Invoice</p></TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleOpenEmailDialog(invoice)} aria-label="Email invoice">
+                                <Mail className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Email Invoice</p></TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -586,3 +612,4 @@ export default function InvoicingPage() {
     </div>
   );
 }
+
