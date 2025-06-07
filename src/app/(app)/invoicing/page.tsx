@@ -224,7 +224,8 @@ export default function InvoicingPage() {
   const filteredInvoices = useMemo(() => {
     return invoices.filter(invoice => {
       let isMatch = true;
-      const invoiceDateOnly = startOfDay(parseISO(invoice.invoiceDate as unknown as string)); // API returns string, context converts to Date
+      // invoice.invoiceDate is already a Date object from AppDataContext
+      const invoiceDateOnly = startOfDay(invoice.invoiceDate); 
 
       if (filterStartDate) {
         if (invoiceDateOnly < startOfDay(filterStartDate)) isMatch = false;
@@ -548,8 +549,8 @@ export default function InvoicingPage() {
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
                     <TableCell>{invoice.customerName}</TableCell>
-                    <TableCell>{format(parseISO(invoice.invoiceDate as unknown as string), "PPP")}</TableCell>
-                    <TableCell>{format(parseISO(invoice.dueDate as unknown as string), "PPP")}</TableCell>
+                    <TableCell>{format(invoice.invoiceDate, "PPP")}</TableCell>
+                    <TableCell>{format(invoice.dueDate, "PPP")}</TableCell>
                     <TableCell>{formatCurrency(invoice.grandTotal)}</TableCell>
                     <TableCell>
                         <span className={`px-2 py-1 text-xs rounded-full ${
