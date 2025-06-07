@@ -1,10 +1,10 @@
 
 "use client";
 
-import type { RevenueEntry, ExpenseEntry, Employee, EmployeeDocument, Invoice, TimeEntry } from '@/lib/types';
+import type { RevenueEntry, ExpenseEntry, Employee, EmployeeDocument, Invoice } from '@/lib/types'; // Removed TimeEntry
 import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { isSameDay, getDaysInMonth as fnGetDaysInMonth, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
+// Removed date-fns imports related to TimeEntry: isSameDay, getDaysInMonth as fnGetDaysInMonth, startOfMonth, endOfMonth, eachDayOfInterval
 
 
 interface AppDataContextType {
@@ -12,7 +12,7 @@ interface AppDataContextType {
   expenseEntries: ExpenseEntry[];
   employees: Employee[];
   invoices: Invoice[];
-  timeEntries: TimeEntry[];
+  // Removed timeEntries: TimeEntry[];
 
   addRevenueEntry: (entry: Omit<RevenueEntry, 'id' | 'date'> & { date: string | Date }) => void;
   addExpenseEntry: (entry: Omit<ExpenseEntry, 'id' | 'date'> & { date: string | Date }) => void;
@@ -27,11 +27,12 @@ interface AppDataContextType {
   getInvoiceById: (invoiceId: string) => Invoice | undefined;
   getNextInvoiceNumber: () => string;
 
-  addTimeEntry: (employeeId: string, date: Date) => void;
-  removeTimeEntry: (employeeId: string, date: Date) => void;
-  getTimeEntriesForEmployeeAndMonth: (employeeId: string, year: number, month: number) => TimeEntry[];
-  getPresentDaysForEmployeeInMonth: (employeeId: string, year: number, month: number) => number;
-  getDaysInMonth: (year: number, month: number) => Date[];
+  // Removed payroll-related functions
+  // addTimeEntry: (employeeId: string, date: Date) => void;
+  // removeTimeEntry: (employeeId: string, date: Date) => void;
+  // getTimeEntriesForEmployeeAndMonth: (employeeId: string, year: number, month: number) => TimeEntry[];
+  // getPresentDaysForEmployeeInMonth: (employeeId: string, year: number, month: number) => number;
+  // getDaysInMonth: (year: number, month: number) => Date[];
 
 
   totalRevenue: number;
@@ -62,7 +63,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [employees, setEmployees] = useState<Employee[]>([]); 
   const [loadingEmployees, setLoadingEmployees] = useState<boolean>(true);
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
-  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  // Removed const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
 
 
   useEffect(() => {
@@ -152,7 +153,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, []);
   
   const getEmployeeById = useCallback(async (employeeId: string): Promise<Employee | undefined> => {
-    // setLoadingEmployees(true); // This line caused the "setstate in render" error. Moved data fetching to useEffect in consuming components.
     try {
       const response = await fetch(`/api/employees/${employeeId}`);
       if (!response.ok) {
@@ -176,8 +176,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error(`Error fetching employee ${employeeId} from API:`, error);
       throw error;
-    } finally {
-      // setLoadingEmployees(false); // Corresponding setLoadingEmployees set to false
     }
   }, []);
 
@@ -325,38 +323,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return invoices.find(inv => inv.id === invoiceId);
   }, [invoices]);
 
-  // Time Entry Management (Client-Side for now)
-  const addTimeEntry = useCallback((employeeId: string, date: Date) => {
-    setTimeEntries(prev => {
-      // Prevent duplicate entries for the same employee on the same day
-      if (prev.some(entry => entry.employeeId === employeeId && isSameDay(entry.date, date))) {
-        return prev;
-      }
-      return [...prev, { id: uuidv4(), employeeId, date }];
-    });
-  }, []);
-
-  const removeTimeEntry = useCallback((employeeId: string, date: Date) => {
-    setTimeEntries(prev => prev.filter(entry => !(entry.employeeId === employeeId && isSameDay(entry.date, date))));
-  }, []);
-
-  const getTimeEntriesForEmployeeAndMonth = useCallback((employeeId: string, year: number, month: number): TimeEntry[] => {
-    return timeEntries.filter(entry => 
-      entry.employeeId === employeeId &&
-      entry.date.getFullYear() === year &&
-      entry.date.getMonth() === month 
-    );
-  }, [timeEntries]);
-  
-  const getPresentDaysForEmployeeInMonth = useCallback((employeeId: string, year: number, month: number): number => {
-    return getTimeEntriesForEmployeeAndMonth(employeeId, year, month).length;
-  }, [getTimeEntriesForEmployeeAndMonth]);
-
-  const getDaysInMonth = useCallback((year: number, month: number): Date[] => {
-    const firstDay = startOfMonth(new Date(year, month));
-    const lastDay = endOfMonth(new Date(year, month));
-    return eachDayOfInterval({start: firstDay, end: lastDay});
-  }, []);
+  // Removed Time Entry Management
+  // Removed getDaysInMonth
 
 
   const totalRevenue = useMemo(() => revenueEntries.reduce((sum, entry) => sum + entry.amount, 0), [revenueEntries]);
@@ -369,7 +337,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       expenseEntries, 
       employees, 
       invoices,
-      timeEntries,
+      // Removed timeEntries,
       addRevenueEntry, 
       addExpenseEntry,
       addEmployee, 
@@ -380,11 +348,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       updateInvoiceStatus,
       getInvoiceById,
       getNextInvoiceNumber,
-      addTimeEntry,
-      removeTimeEntry,
-      getTimeEntriesForEmployeeAndMonth,
-      getPresentDaysForEmployeeInMonth,
-      getDaysInMonth,
+      // Removed payroll-related functions
       totalRevenue,
       totalExpenses,
       netProfit,

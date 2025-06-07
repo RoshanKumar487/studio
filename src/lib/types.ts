@@ -62,8 +62,4 @@ export interface Invoice {
   status: 'Draft' | 'Sent' | 'Paid' | 'Overdue';
 }
 
-export interface TimeEntry {
-  id: string;
-  employeeId: string;
-  date: Date; // Date of presence
-}
+// TimeEntry interface removed
