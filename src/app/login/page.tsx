@@ -57,7 +57,7 @@ export default function LoginPage() {
     if (success) {
       setCurrentMobileNumber(data.mobileNumber);
       setShowOtpForm(true);
-      otpForm.reset(); // Clear previous OTP if any
+      otpForm.reset({ otp: '' }); // Explicitly reset otp field to empty string
     }
     setIsSendingOtp(false);
   };
