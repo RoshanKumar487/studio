@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from '@/components/ui/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { DatePicker } from '@/components/shared/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,7 +21,7 @@ import { ArrowUpDown, PlusCircle, Paperclip, Camera, Loader2, VideoOff, XCircle,
 import { useToast } from "@/hooks/use-toast";
 import { format, endOfDay } from 'date-fns';
 import NextImage from 'next/image';
-import { Label } from '@/components/ui/label'; // Import Label
+import { Label } from '@/components/ui/label';
 
 const expenseSchema = z.object({
   date: z.date({ required_error: "Date is required." }),
@@ -85,16 +85,15 @@ export default function ExpensesPage() {
 
   // Effect to trigger print when report data is ready
   useEffect(() => {
-    if (expensesForReport) { // Check if it's not null (meaning report generation was triggered)
+    if (expensesForReport) { 
       if (expensesForReport.length > 0) {
         const timer = setTimeout(() => {
           window.print();
           setExpensesForReport(null); 
           setReportPeriodString("");
-        }, 250); // Increased delay slightly
+        }, 250); 
         return () => clearTimeout(timer);
       } else {
-        // If report generated but was empty, still clear it after a bit
          const timer = setTimeout(() => {
             setExpensesForReport(null); 
             setReportPeriodString("");
@@ -114,8 +113,8 @@ export default function ExpensesPage() {
       return;
     }
 
-    const filtered = sortedExpenseEntries.filter(entry => { // Use sorted/existing entries
-      const entryDate = new Date(entry.date); // Ensure entry.date is a Date object
+    const filtered = sortedExpenseEntries.filter(entry => { 
+      const entryDate = new Date(entry.date); 
       return entryDate >= reportStartDate && entryDate <= endOfDay(reportEndDate);
     });
 
@@ -123,12 +122,11 @@ export default function ExpensesPage() {
     
     if (filtered.length === 0) {
       toast({ title: "No Data", description: "No expenses found for the selected period.", variant: "default" });
-      setExpensesForReport([]); // Set to empty array to trigger useEffect and show "No expenses found" in report section
+      setExpensesForReport([]); 
       return;
     }
 
     setExpensesForReport(filtered);
-    // The useEffect will trigger window.print()
   };
 
 
@@ -280,7 +278,7 @@ export default function ExpensesPage() {
         documentFileType: entry.documentFileType,
         documentFileSize: entry.documentFileSize,
       });
-      setIsHistoryAttachmentDialogValidOpen(true);
+      setIsHistoryAttachmentDialogValiOpen(true);
     }
   };
 
@@ -391,12 +389,12 @@ export default function ExpensesPage() {
                     </div>
                     {selectedFile && (
                       <div className="flex items-center justify-between gap-2 rounded-md border p-2 bg-muted/50">
-                        <FormDescription className="flex items-center gap-1.5 text-xs truncate">
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
                           <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span className="truncate" title={selectedFile.name}>
                             {selectedFile.name} ({formatFileSize(selectedFile.size)})
                           </span>
-                        </FormDescription>
+                        </p>
                         <div className="flex gap-1 shrink-0">
                             {imagePreviewUrl && (
                                 <Button type="button" variant="ghost" size="sm" onClick={() => setIsViewAttachmentDialogOpen(true)} className="text-xs h-auto py-1 px-2">
@@ -442,9 +440,9 @@ export default function ExpensesPage() {
                     </Button>
                   </div>
                    {selectedFile && isCameraMode && ( 
-                        <FormDescription className="flex items-center gap-1 pt-1 text-xs">
+                        <p className="flex items-center gap-1 pt-1 text-xs text-muted-foreground">
                             <Paperclip className="h-3 w-3 text-muted-foreground" /> Captured: {selectedFile.name} ({formatFileSize(selectedFile.size)})
-                        </FormDescription>
+                        </p>
                     )}
                 </Card>
               )}
@@ -490,9 +488,9 @@ export default function ExpensesPage() {
           <Button onClick={handleGenerateAndPrintReport} className="w-full md:w-auto">
             <Printer className="mr-2 h-4 w-4" /> Generate & Print Report
           </Button>
-          <FormDescription className="text-xs">
+          <p className="text-xs text-muted-foreground">
             This will prepare a printable view of expenses for the selected date range. Use your browser's print dialog to "Save as PDF".
-          </FormDescription>
+          </p>
         </CardContent>
       </Card>
 
@@ -556,7 +554,6 @@ export default function ExpensesPage() {
         </CardContent>
       </Card>
 
-      {/* Dialog for viewing currently selected/captured image in the form */}
       <Dialog open={isViewAttachmentDialogOpen} onOpenChange={setIsViewAttachmentDialogOpen}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
@@ -591,7 +588,6 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog for viewing attachment metadata from history */}
       <Dialog open={isHistoryAttachmentDialogValidOpen} onOpenChange={setIsHistoryAttachmentDialogValidOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -620,7 +616,6 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Hidden section for the printable report */}
       {expensesForReport && (
         <div id="expense-report-section" className="printable-report-area">
           <h2 className="text-2xl font-bold mb-2">{reportPeriodString}</h2>
@@ -716,3 +711,5 @@ export default function ExpensesPage() {
     </div>
   );
 }
+
+      
