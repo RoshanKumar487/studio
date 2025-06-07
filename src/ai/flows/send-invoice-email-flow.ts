@@ -1,9 +1,9 @@
 
 'use server';
 /**
- * @fileOverview A Genkit flow to simulate sending an invoice email.
+ * @fileOverview A Genkit flow to simulate sending an invoice email and generate email content.
  *
- * - sendInvoiceEmail - Simulates sending an invoice email.
+ * - sendInvoiceEmail - Simulates sending an invoice email and generates content.
  * - SendInvoiceEmailInput - The input type for the sendInvoiceEmail function.
  * - SendInvoiceEmailOutput - The return type for the sendInvoiceEmail function.
  */
@@ -22,6 +22,8 @@ export type SendInvoiceEmailInput = z.infer<typeof SendInvoiceEmailInputSchema>;
 const SendInvoiceEmailOutputSchema = z.object({
   success: z.boolean().describe('Whether the email sending simulation was successful.'),
   message: z.string().describe('A message indicating the outcome of the simulation.'),
+  emailSubject: z.string().describe('The generated subject line for the email.'),
+  emailBody: z.string().describe('The generated body content for the email.'),
 });
 export type SendInvoiceEmailOutput = z.infer<typeof SendInvoiceEmailOutputSchema>;
 
@@ -34,9 +36,31 @@ const prompt = ai.definePrompt({
   input: { schema: SendInvoiceEmailInputSchema },
   output: { schema: SendInvoiceEmailOutputSchema },
   prompt: `You are an invoicing assistant. A request has been made to send invoice {{invoiceNumber}} for customer "{{customerName}}" to the email address: {{recipientEmail}}.
-Acknowledge this request positively and confirm that the (mock) email has been "sent".
-Invoice ID for reference (do not include in response to user): {{invoiceId}}.
-Respond with success: true.
+  
+Generate a professional email subject and body for this invoice.
+The company sending the invoice is "FlowHQ".
+
+Subject Line:
+- Should clearly state it's an invoice.
+- Include the invoice number: {{invoiceNumber}}.
+- Include the sender company name: FlowHQ.
+Example: "Invoice {{invoiceNumber}} from FlowHQ for {{customerName}}"
+
+Email Body:
+- Start with a polite greeting to "{{customerName}}".
+- Clearly state that their invoice {{invoiceNumber}} from FlowHQ is ready/attached.
+  (Assume for this simulation that the invoice itself would be attached or linked separately).
+- You can include a brief thank you for their business.
+- End with a professional closing (e.g., "Sincerely," or "Best regards,").
+- Sign off with "The FlowHQ Team" or "FlowHQ".
+
+Respond with:
+- success: true
+- message: A confirmation message like "Email for invoice {{invoiceNumber}} to {{customerName}} prepared and simulated as sent."
+- emailSubject: The generated subject line.
+- emailBody: The generated email body.
+
+Invoice ID for internal reference (do not include in the user-facing email content): {{invoiceId}}.
 `,
 });
 
@@ -47,28 +71,30 @@ const sendInvoiceEmailFlow = ai.defineFlow(
     outputSchema: SendInvoiceEmailOutputSchema,
   },
   async (input) => {
-    console.log(`Simulating sending invoice email:
+    console.log(`Simulating sending invoice email and generating content:
       Invoice ID: ${input.invoiceId}
       Recipient: ${input.recipientEmail}
       Customer: ${input.customerName}
       Invoice Number: ${input.invoiceNumber}`);
 
-    // In a real scenario, you would integrate with an email service here.
-    // For this prototype, we'll use the LLM to generate a confirmation message.
     const { output } = await prompt(input);
 
     if (!output) {
       return {
         success: false,
         message: 'AI model did not return an output for email simulation.',
+        emailSubject: 'Error: Could not generate subject',
+        emailBody: 'Error: Could not generate email body.',
       };
     }
     
-    // Ensure the output matches the schema, even if the prompt is simple
     return {
-        success: output.success !== undefined ? output.success : true, // Default to true if prompt doesn't set it
-        message: output.message || `Successfully simulated sending invoice ${input.invoiceNumber} to ${input.recipientEmail}.`
+        success: output.success !== undefined ? output.success : true,
+        message: output.message || `Successfully simulated sending invoice ${input.invoiceNumber} to ${input.recipientEmail}.`,
+        emailSubject: output.emailSubject || `Invoice ${input.invoiceNumber} from FlowHQ`,
+        emailBody: output.emailBody || `Dear ${input.customerName},\n\nPlease find your invoice ${input.invoiceNumber} attached.\n\nThank you for your business,\nFlowHQ Team`,
     };
   }
 );
 
+    
