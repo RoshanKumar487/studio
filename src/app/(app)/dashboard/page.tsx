@@ -2,14 +2,23 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
+import { useForm, type SubmitHandler } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAppData } from "@/context/app-data-context";
-import { DollarSign, TrendingUp, TrendingDown, Users, Building, Loader2, PieChartIcon, Banknote, Landmark } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Users, Building, Loader2, PieChartIcon, Banknote, Landmark, LinkIcon, Unlink } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { format, subDays, eachDayOfInterval } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
 
 const PIE_CHART_COLORS = [
   'hsl(var(--chart-1))', 
@@ -21,10 +30,41 @@ const PIE_CHART_COLORS = [
   'hsl(var(--accent))',
 ];
 
+const bankConnectionSchema = z.object({
+  bankName: z.string().min(2, "Bank name must be at least 2 characters."),
+  accountType: z.enum(["Checking", "Savings", "Credit Card"], { required_error: "Please select an account type."}),
+  mockUsername: z.string().min(1, "Username is required for simulation."),
+  mockPassword: z.string().min(1, "Password is required for simulation."),
+});
+type BankConnectionFormData = z.infer<typeof bankConnectionSchema>;
+
+interface BankConnectionDetails {
+  connected: boolean;
+  bankName: string | null;
+  accountType: string | null;
+}
 
 export default function DashboardPage() {
   const { totalRevenue, totalExpenses, netProfit, revenueEntries, expenseEntries, employees, invoices, loadingEmployees } = useAppData();
-  const [isBankConnectDialogOpen, setIsBankConnectDialogOpen] = useState(false);
+  const { toast } = useToast();
+  
+  const [isBankConnectFormOpen, setIsBankConnectFormOpen] = useState(false);
+  const [isDisconnectConfirmOpen, setIsDisconnectConfirmOpen] = useState(false);
+  const [bankConnectionDetails, setBankConnectionDetails] = useState<BankConnectionDetails>({
+    connected: false,
+    bankName: null,
+    accountType: null,
+  });
+
+  const bankForm = useForm<BankConnectionFormData>({
+    resolver: zodResolver(bankConnectionSchema),
+    defaultValues: {
+      bankName: '',
+      accountType: undefined,
+      mockUsername: '',
+      mockPassword: '',
+    },
+  });
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -63,6 +103,34 @@ export default function DashboardPage() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value); 
   }, [expenseEntries]);
+
+  const onBankConnectSubmit: SubmitHandler<BankConnectionFormData> = (data) => {
+    setBankConnectionDetails({
+      connected: true,
+      bankName: data.bankName,
+      accountType: data.accountType,
+    });
+    toast({
+      title: "Bank Connection Simulated",
+      description: `Successfully 'connected' to ${data.bankName} (${data.accountType}).`,
+    });
+    bankForm.reset();
+    setIsBankConnectFormOpen(false);
+  };
+
+  const handleDisconnectBank = () => {
+    setBankConnectionDetails({
+      connected: false,
+      bankName: null,
+      accountType: null,
+    });
+    toast({
+      title: "Bank Disconnected (Simulated)",
+      description: "You have 'disconnected' your bank account.",
+      variant: "default",
+    });
+    setIsDisconnectConfirmOpen(false);
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -129,44 +197,131 @@ export default function DashboardPage() {
         </Card>
         <Card className="shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Link Bank Account</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {bankConnectionDetails.connected ? "Bank Account Linked" : "Link Bank Account"}
+            </CardTitle>
             <Banknote className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <Button className="w-full mt-2" onClick={() => setIsBankConnectDialogOpen(true)}>
-              <Landmark className="mr-2 h-4 w-4" /> Connect Bank
-            </Button>
-            <p className="text-xs text-muted-foreground mt-2">Automate transaction imports (placeholder).</p>
+            {bankConnectionDetails.connected ? (
+              <>
+                <p className="text-sm">Connected to: <strong>{bankConnectionDetails.bankName}</strong> ({bankConnectionDetails.accountType})</p>
+                <p className="text-xs text-muted-foreground mt-1">Transactions are being (notionally) synced.</p>
+                <Button variant="outline" className="w-full mt-3" onClick={() => setIsDisconnectConfirmOpen(true)}>
+                  <Unlink className="mr-2 h-4 w-4" /> Disconnect Bank
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button className="w-full mt-2" onClick={() => setIsBankConnectFormOpen(true)}>
+                  <LinkIcon className="mr-2 h-4 w-4" /> Connect Bank
+                </Button>
+                <p className="text-xs text-muted-foreground mt-2">Automate transaction imports (simulated).</p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <Dialog open={isBankConnectDialogOpen} onOpenChange={setIsBankConnectDialogOpen}>
-        <DialogContent>
+      <Dialog open={isBankConnectFormOpen} onOpenChange={setIsBankConnectFormOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center">
-              <Landmark className="mr-2 h-5 w-5 text-primary"/> Bank Integration (Feature Placeholder)
+            <DialogTitle className="flex items-center gap-2">
+              <Landmark className="h-5 w-5 text-primary"/> Connect Your Bank Account (Simulated)
             </DialogTitle>
-            <DialogDescription className="pt-2">
-              This feature would allow you to securely connect your bank accounts to automatically import transactions and expenses.
+            <DialogDescription>
+              Enter mock details to simulate connecting a bank account. 
+              <strong>Do NOT use real bank credentials.</strong>
             </DialogDescription>
           </DialogHeader>
-          <Alert variant="default" className="mt-4 bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-700">
-            <AlertTitle className="text-blue-700 dark:text-blue-300">How it would work:</AlertTitle>
-            <AlertDescription className="text-xs text-blue-600 dark:text-blue-400">
-              You would typically be redirected to a secure portal (e.g., provided by Plaid or Stripe Financial Connections) to authenticate with your bank. 
-              Once linked, FlowHQ could periodically fetch new transactions.
-              <br /><br />
-              <strong>For this prototype, actual bank integration is not implemented.</strong>
-            </AlertDescription>
-          </Alert>
-          <DialogFooter className="mt-2">
-            <DialogClose asChild>
-              <Button type="button">Understood</Button>
-            </DialogClose>
-          </DialogFooter>
+          <Form {...bankForm}>
+            <form onSubmit={bankForm.handleSubmit(onBankConnectSubmit)} className="space-y-4 py-2">
+              <FormField
+                control={bankForm.control}
+                name="bankName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bank Name</FormLabel>
+                    <FormControl><Input placeholder="e.g., Mock National Bank" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={bankForm.control}
+                name="accountType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Account Type</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger><SelectValue placeholder="Select account type" /></SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Checking">Checking</SelectItem>
+                        <SelectItem value="Savings">Savings</SelectItem>
+                        <SelectItem value="Credit Card">Credit Card</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={bankForm.control}
+                name="mockUsername"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Username (Demo Only)</FormLabel>
+                    <FormControl><Input placeholder="demo_user" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={bankForm.control}
+                name="mockPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password (Demo Only)</FormLabel>
+                    <FormControl><Input type="password" placeholder="••••••••" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <Alert variant="default" className="mt-4 bg-amber-50 border-amber-200 dark:bg-amber-900/30 dark:border-amber-700">
+                  <AlertTitle className="text-amber-700 dark:text-amber-300 text-xs">Important Simulation Note:</AlertTitle>
+                  <AlertDescription className="text-xs text-amber-600 dark:text-amber-400">
+                    This is a simulation. No actual bank connection will be made, and no data is sent or stored.
+                  </AlertDescription>
+              </Alert>
+              <DialogFooter className="pt-2">
+                <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+                <Button type="submit">
+                  <LinkIcon className="mr-2 h-4 w-4"/> Connect Account (Simulate)
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
+      
+      <AlertDialog open={isDisconnectConfirmOpen} onOpenChange={setIsDisconnectConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disconnect from {bankConnectionDetails.bankName || 'Bank'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to disconnect? This will stop the (notional) automatic import of transactions.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDisconnectBank} className="bg-destructive hover:bg-destructive/90">
+              Disconnect (Simulate)
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
 
       <div className="grid gap-6 md:grid-cols-3">
@@ -242,4 +397,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
