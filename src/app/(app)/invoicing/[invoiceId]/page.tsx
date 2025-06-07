@@ -4,14 +4,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAppData } from '@/context/app-data-context';
-import type { Invoice } from '@/lib/types';
+import type { Invoice, Employee } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Printer, Edit, CheckCircle, Send, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Printer, Edit, CheckCircle, Send, AlertTriangle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
-import { AppLogo } from '@/components/shared/app-logo'; // Assuming you have a logo
+import { AppLogo } from '@/components/shared/app-logo'; 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
@@ -20,7 +20,9 @@ export default function InvoiceDetailPage() {
   const params = useParams();
   const { toast } = useToast();
   const { getInvoiceById, getEmployeeById, updateInvoiceStatus } = useAppData();
-  const [invoice, setInvoice] = useState<Invoice | null | undefined>(undefined); // undefined for loading, null for not found
+  const [invoice, setInvoice] = useState<Invoice | null | undefined>(undefined); 
+  const [serviceEmployee, setServiceEmployee] = useState<Employee | null | undefined>(undefined);
+  const [isLoadingEmployee, setIsLoadingEmployee] = useState(false);
 
   const invoiceId = typeof params.invoiceId === 'string' ? params.invoiceId : '';
 
@@ -31,6 +33,33 @@ export default function InvoiceDetailPage() {
     }
   }, [invoiceId, getInvoiceById]);
 
+  useEffect(() => {
+    const fetchEmployee = async () => {
+      if (invoice && invoice.employeeId) {
+        setIsLoadingEmployee(true);
+        setServiceEmployee(undefined); // Reset while fetching
+        try {
+          const emp = await getEmployeeById(invoice.employeeId);
+          setServiceEmployee(emp || null); // null if not found by API
+        } catch (error) {
+          console.error("Failed to fetch service employee:", error);
+          setServiceEmployee(null); // Set to null on error
+          toast({
+            title: "Error",
+            description: "Could not load details for the service employee.",
+            variant: "destructive"
+          });
+        } finally {
+          setIsLoadingEmployee(false);
+        }
+      } else {
+        setServiceEmployee(null); // No employeeId, so no employee to fetch
+      }
+    };
+
+    fetchEmployee();
+  }, [invoice, getEmployeeById, toast]);
+
   const handlePrint = () => {
     window.print();
   };
@@ -38,7 +67,7 @@ export default function InvoiceDetailPage() {
   const handleStatusChange = (newStatus: Invoice['status']) => {
     if (invoice) {
         updateInvoiceStatus(invoice.id, newStatus);
-        setInvoice(prev => prev ? {...prev, status: newStatus} : null); // Update local state immediately
+        setInvoice(prev => prev ? {...prev, status: newStatus} : null); 
         toast({
             title: "Invoice Status Updated",
             description: `Invoice ${invoice.invoiceNumber} status changed to ${newStatus}.`,
@@ -49,7 +78,7 @@ export default function InvoiceDetailPage() {
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
   if (invoice === undefined) {
-    return <div className="flex justify-center items-center h-screen"><p>Loading invoice...</p></div>;
+    return <div className="flex justify-center items-center h-screen"><Loader2 className="h-8 w-8 animate-spin text-primary mr-2" /> Loading invoice...</div>;
   }
 
   if (!invoice) {
@@ -65,7 +94,6 @@ export default function InvoiceDetailPage() {
     );
   }
   
-  const employee = invoice.employeeId ? getEmployeeById(invoice.employeeId) : null;
 
   return (
     <div className="max-w-4xl mx-auto p-4 print:p-0">
@@ -118,8 +146,14 @@ export default function InvoiceDetailPage() {
             <div className="text-right">
               <p><span className="font-semibold">Invoice Date:</span> {format(invoice.invoiceDate, "PPP")}</p>
               <p><span className="font-semibold">Due Date:</span> {format(invoice.dueDate, "PPP")}</p>
-              {employee && (
-                <p><span className="font-semibold">Service By:</span> {employee.name}</p>
+              {isLoadingEmployee && invoice.employeeId && (
+                 <p><span className="font-semibold">Service By:</span> <Loader2 className="inline h-4 w-4 animate-spin" /> Loading...</p>
+              )}
+              {!isLoadingEmployee && serviceEmployee && (
+                <p><span className="font-semibold">Service By:</span> {serviceEmployee.name}</p>
+              )}
+              {!isLoadingEmployee && invoice.employeeId && serviceEmployee === null && (
+                 <p><span className="font-semibold">Service By:</span> <span className="text-muted-foreground italic">Employee not found</span></p>
               )}
             </div>
           </div>
@@ -196,3 +230,4 @@ export default function InvoiceDetailPage() {
     </div>
   );
 }
+
