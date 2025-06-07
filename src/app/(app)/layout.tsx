@@ -45,7 +45,7 @@ function AppLayoutContent({ children, pathname }: { children: ReactNode; pathnam
     }
     // If auth has loaded and user is not authenticated, redirect to login.
     // Also, ensure we are not already on a public-facing page to avoid redirect loops if login page itself is under (app)
-    if (!isAuthenticated && pathname !== '/login') { // Added pathname check
+    if (!isAuthenticated && pathname !== '/login') { 
       router.push('/login');
     }
   }, [authLoading, isAuthenticated, router, pathname]);
@@ -74,9 +74,9 @@ function AppLayoutContent({ children, pathname }: { children: ReactNode; pathnam
   // If not authenticated and no longer loading, content is handled by redirection in useEffect.
   // However, to prevent a flash of content or errors, ensure we don't render main layout.
   if (!isAuthenticated && !authLoading) {
-     // It's possible the redirect hasn't happened yet, or this component renders briefly.
-     // Returning null or a minimal loader here can be a fallback.
      // The useEffect should handle the primary redirection.
+     // Returning null or a minimal loader here can be a fallback.
+     // Removed direct router.push from here as it caused render-time state updates.
      return null;
   }
 
