@@ -12,14 +12,10 @@ export interface ExpenseEntry {
   amount: number;
   category: string;
   description:string;
-}
-
-export interface Appointment {
-  id: string;
-  date: Date; // Represents the specific day of the appointment
-  time: string; // e.g., "10:00 AM" or "14:30"
-  title: string; // Could be client name or service
-  description?: string;
+  documentFileName?: string;
+  documentFileType?: string;
+  documentFileSize?: number;
+  submittedBy?: string;
 }
 
 export interface EmployeeDocument {
@@ -36,15 +32,11 @@ export interface Employee {
   id: string; // This will be the Firestore document ID
   name: string;
   email?: string;
+  jobTitle?: string;
+  startDate?: Date | null; // Can be null if not set
+  employmentType?: 'Full-time' | 'Part-time' | 'Contract';
+  actualSalary?: number | null; // Monthly salary
   documents: EmployeeDocument[]; // Documents will be an array within the employee object in Firestore
-}
-
-export interface TimesheetEntry {
-  id: string;
-  employeeId: string;
-  date: Date;
-  hours: number;
-  taskDescription: string;
 }
 
 export interface InvoiceLineItem {
@@ -53,17 +45,22 @@ export interface InvoiceLineItem {
   quantity: number;
   unitPrice: number;
   total: number;
+  customColumnValue?: string; // Value for the single custom column
 }
 
 export interface Invoice {
   id: string;
   invoiceNumber: string;
+  companyName: string; // Name of the company sending the invoice
+  companyAddress?: string; // Address of the company sending the invoice
   employeeId?: string; // Can be linked to an employee
+  serviceProviderName?: string; // Manually entered name if employeeId is not set
   customerName: string; // Name of the company/client being invoiced
   customerAddress?: string;
   invoiceDate: Date;
   dueDate: Date;
   lineItems: InvoiceLineItem[];
+  customColumnHeader?: string; // Header for the single custom column for line items
   subTotal: number;
   taxRate: number; // e.g., 0.1 for 10%
   taxAmount: number;

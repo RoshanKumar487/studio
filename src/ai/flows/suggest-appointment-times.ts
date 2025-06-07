@@ -1,88 +1,51 @@
+
+// This Genkit flow is no longer used and can be deleted.
+// All AI Scheduler functionality has been removed and replaced by the AI Assistant page.
+
 'use server';
 
 /**
- * @fileOverview This file defines a Genkit flow for suggesting optimal appointment times based on historical data and revenue projections.
- *
- * - suggestAppointmentTimes - A function that suggests optimal appointment times.
- * - SuggestAppointmentTimesInput - The input type for the suggestAppointmentTimes function.
- * - SuggestAppointmentTimesOutput - The return type for the suggestAppointmentTimes function.
+ * @fileOverview This file defined a Genkit flow for suggesting optimal appointment times.
+ * This functionality has been removed.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const SuggestAppointmentTimesInputSchema = z.object({
-  historicalData: z
-    .string()
-    .describe(
-      'Historical appointment data, including date, time, duration, and revenue generated.'
-    ),
-  revenueProjections: z
-    .string()
-    .describe('Revenue projections for the upcoming weeks or months.'),
-  appointmentDuration: z
-    .number()
-    .describe('The duration of the appointment in minutes.'),
-  availableDays: z
-    .string()
-    .describe('Days of the week the appointment can be scheduled on.'),
-  availableTimeSlots: z
-    .string()
-    .describe('Time slots available to schedule an appointment'),
+const SuggestAppointmentTimesInputSchema_REMOVED = z.object({
+  // ...
 });
-export type SuggestAppointmentTimesInput = z.infer<
-  typeof SuggestAppointmentTimesInputSchema
+export type SuggestAppointmentTimesInput_REMOVED = z.infer<
+  typeof SuggestAppointmentTimesInputSchema_REMOVED
 >;
 
-const SuggestAppointmentTimesOutputSchema = z.object({
-  suggestedTimes: z
-    .string()
-    .describe(
-      'Suggested optimal appointment times based on historical data and revenue projections.'
-    ),
-  reasoning: z
-    .string()
-    .describe(
-      'Explanation of why the suggested times are optimal, based on the input data.'
-    ),
+const SuggestAppointmentTimesOutputSchema_REMOVED = z.object({
+  // ...
 });
-export type SuggestAppointmentTimesOutput = z.infer<
-  typeof SuggestAppointmentTimesOutputSchema
+export type SuggestAppointmentTimesOutput_REMOVED = z.infer<
+  typeof SuggestAppointmentTimesOutputSchema_REMOVED
 >;
 
-export async function suggestAppointmentTimes(
-  input: SuggestAppointmentTimesInput
-): Promise<SuggestAppointmentTimesOutput> {
-  return suggestAppointmentTimesFlow(input);
+export async function suggestAppointmentTimes_REMOVED(
+  input: SuggestAppointmentTimesInput_REMOVED
+): Promise<SuggestAppointmentTimesOutput_REMOVED> {
+  // Functionality removed
+  throw new Error("AI Scheduler functionality has been removed.");
 }
 
-const prompt = ai.definePrompt({
-  name: 'suggestAppointmentTimesPrompt',
-  input: {schema: SuggestAppointmentTimesInputSchema},
-  output: {schema: SuggestAppointmentTimesOutputSchema},
-  prompt: `You are an AI assistant that suggests optimal appointment times for businesses.
-
-  Based on the historical data, revenue projections, and the business owner's preferences for appointment duration and available days, you need to find the best possible appointment times to maximize their earnings.
-
-  Historical Data: {{{historicalData}}}
-  Revenue Projections: {{{revenueProjections}}}
-  Appointment Duration: {{{appointmentDuration}}} minutes
-  Available Days: {{{availableDays}}}
-  Available Time Slots: {{{availableTimeSlots}}}
-
-  Consider these factors and suggest appointment times in a structured and readable format.
-  Explain the reasoning behind your suggestions.
-  `,
+const prompt_REMOVED = ai.definePrompt({
+  name: 'suggestAppointmentTimesPrompt_REMOVED',
+  // ...
 });
 
-const suggestAppointmentTimesFlow = ai.defineFlow(
+const suggestAppointmentTimesFlow_REMOVED = ai.defineFlow(
   {
-    name: 'suggestAppointmentTimesFlow',
-    inputSchema: SuggestAppointmentTimesInputSchema,
-    outputSchema: SuggestAppointmentTimesOutputSchema,
+    name: 'suggestAppointmentTimesFlow_REMOVED',
+    // ...
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    throw new Error("AI Scheduler functionality has been removed.");
   }
 );
+
+    

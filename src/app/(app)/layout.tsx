@@ -4,7 +4,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { AppDataProvider } from '@/context/app-data-context';
+import React from 'react';
 import {
   SidebarProvider,
   Sidebar,
@@ -15,33 +15,33 @@ import {
   SidebarMenuButton,
   SidebarInset,
   SidebarTrigger,
+  SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { AppLogo } from '@/components/shared/app-logo';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LayoutDashboard, CalendarDays, TrendingUp, TrendingDown, Sparkles, Users, FileText, Clock, FileSpreadsheet, PanelLeft } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, TrendingDown, Sparkles, Users, FileSpreadsheet, PanelLeft, Loader2 } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/appointments', label: 'Appointments', icon: CalendarDays },
   { href: '/revenue', label: 'Revenue', icon: TrendingUp },
   { href: '/expenses', label: 'Expenses', icon: TrendingDown },
   { href: '/hr', label: 'HR & Employees', icon: Users },
-  { href: '/timesheets', label: 'Timesheets', icon: Clock },
   { href: '/invoicing', label: 'Invoicing', icon: FileSpreadsheet },
-  { href: '/ai-scheduler', label: 'AI Scheduler', icon: Sparkles },
+  { href: '/ai-assistant', label: 'AI Assistant', icon: Sparkles },
 ];
 
 function AppLayoutContent({ children, pathname }: { children: ReactNode; pathname: string }) {
   const { state: sidebarState, isMobile, setOpenMobile } = useSidebar();
-  const collapsed = !isMobile && sidebarState === 'collapsed';
 
   const handleMenuClick = () => {
     if (isMobile) {
       setOpenMobile(false);
     }
   };
+
+  const collapsed = !isMobile && sidebarState === 'collapsed';
 
   return (
     <>
@@ -70,6 +70,9 @@ function AppLayoutContent({ children, pathname }: { children: ReactNode; pathnam
             </SidebarMenu>
           </ScrollArea>
         </SidebarContent>
+        <SidebarFooter className="p-2 border-t border-sidebar-border">
+           {/* User info and logout button removed */}
+        </SidebarFooter>
       </Sidebar>
       <SidebarInset className="flex flex-col">
         <header className="sticky top-0 z-10 flex h-14 items-center gap-4 border-b bg-background/80 px-6 backdrop-blur-sm md:hidden">
@@ -93,13 +96,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <AppDataProvider>
-      <SidebarProvider defaultOpen> 
-        <AppLayoutContent pathname={pathname}>
-          {children}
-        </AppLayoutContent>
-      </SidebarProvider>
-    </AppDataProvider>
+    <SidebarProvider defaultOpen> 
+      <AppLayoutContent pathname={pathname}>
+        {children}
+      </AppLayoutContent>
+    </SidebarProvider>
   );
 }
-

@@ -1,293 +1,412 @@
 
 "use client";
 
-import type { RevenueEntry, ExpenseEntry, Appointment, Employee, EmployeeDocument, TimesheetEntry, Invoice } from '@/lib/types';
+import type { RevenueEntry, ExpenseEntry, Employee, EmployeeDocument, Invoice } from '@/lib/types';
 import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, doc, getDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { useToast } from "@/hooks/use-toast";
 
 interface AppDataContextType {
   revenueEntries: RevenueEntry[];
   expenseEntries: ExpenseEntry[];
-  appointments: Appointment[];
-  employees: Employee[]; // Will now come from Firestore
-  timesheetEntries: TimesheetEntry[];
+  employees: Employee[];
   invoices: Invoice[];
-
-  addRevenueEntry: (entry: Omit<RevenueEntry, 'id' | 'date'> & { date: string | Date }) => void;
-  addExpenseEntry: (entry: Omit<ExpenseEntry, 'id' | 'date'> & { date: string | Date }) => void;
-  addAppointment: (entry: Omit<Appointment, 'id' | 'date'> & { date: string | Date }) => void;
+  
+  addRevenueEntry: (entry: Omit<RevenueEntry, 'id' | 'date'> & { date: string | Date }) => Promise<void>;
+  addExpenseEntry: (entry: Omit<ExpenseEntry, 'id' | 'date'> & { date: string | Date }) => Promise<void>;
   
   addEmployee: (employeeData: Omit<Employee, 'id' | 'documents'>) => Promise<Employee | null>;
-  addEmployeeDocument: (employeeId: string, documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'>) => Promise<void>;
-  deleteEmployeeDocument: (employeeId: string, documentId: string) => Promise<void>;
-  getEmployeeById: (employeeId: string) => Promise<Employee | undefined>; // Now async
-
-  addTimesheetEntry: (entry: Omit<TimesheetEntry, 'id'>) => void;
-  getTimesheetsByEmployee: (employeeId: string) => TimesheetEntry[];
+  addEmployeeDocument: (employeeId: string, documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'>) => Promise<Employee | null>;
+  deleteEmployeeDocument: (employeeId: string, documentId: string) => Promise<Employee | null>;
+  getEmployeeById: (employeeId: string) => Promise<Employee | undefined>; 
   
-  addInvoice: (invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>) => Invoice;
-  updateInvoiceStatus: (invoiceId: string, status: Invoice['status']) => void;
-  getInvoiceById: (invoiceId: string) => Invoice | undefined;
-  getNextInvoiceNumber: () => string;
+  addInvoice: (invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>) => Promise<Invoice | null>;
+  updateInvoice: (invoiceId: string, invoiceData: Partial<Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>>) => Promise<Invoice | null>;
+  updateInvoiceStatus: (invoiceId: string, status: Invoice['status']) => Promise<void>;
+  getInvoiceById: (invoiceId: string) => Invoice | undefined; // Stays local after fetch
+  getNextInvoiceNumber: () => string; // Stays client-side for now
 
   totalRevenue: number;
   totalExpenses: number;
   netProfit: number;
+  
   loadingEmployees: boolean;
+  loadingRevenue: boolean;
+  loadingExpenses: boolean;
+  loadingInvoices: boolean;
 }
 
 const AppDataContext = createContext<AppDataContextType | undefined>(undefined);
 
-// Sample initial data (will be replaced for employees)
-const initialRevenue: RevenueEntry[] = [
-  { id: uuidv4(), date: new Date(2024, 6, 1), amount: 1200, description: "Web design project" },
-  { id: uuidv4(), date: new Date(2024, 6, 5), amount: 750, description: "Consulting services" },
-];
-const initialExpenses: ExpenseEntry[] = [
-  { id: uuidv4(), date: new Date(2024, 6, 2), amount: 150, category: "Software", description: "Subscription for design tool" },
-  { id: uuidv4(), date: new Date(2024, 6, 7), amount: 80, category: "Marketing", description: "Online ads" },
-];
-const initialAppointments: Appointment[] = [
-   { id: uuidv4(), date: new Date(new Date().setDate(new Date().getDate() + 2)), time: "10:00", title: "Client Meeting - John Doe" },
-   { id: uuidv4(), date: new Date(new Date().setDate(new Date().getDate() + 3)), time: "14:30", title: "Project Sync - Team Alpha" },
-];
-const initialTimesheetEntries: TimesheetEntry[] = [];
-const initialInvoices: Invoice[] = [];
-
-
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const [revenueEntries, setRevenueEntries] = useState<RevenueEntry[]>(initialRevenue);
-  const [expenseEntries, setExpenseEntries] = useState<ExpenseEntry[]>(initialExpenses);
-  const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
-  
-  const [employees, setEmployees] = useState<Employee[]>([]); // Initial empty, will be fetched
+  const { toast } = useToast();
+
+  const [revenueEntries, setRevenueEntries] = useState<RevenueEntry[]>([]);
+  const [expenseEntries, setExpenseEntries] = useState<ExpenseEntry[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]); 
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+
   const [loadingEmployees, setLoadingEmployees] = useState<boolean>(true);
+  const [loadingRevenue, setLoadingRevenue] = useState<boolean>(true);
+  const [loadingExpenses, setLoadingExpenses] = useState<boolean>(true);
+  const [loadingInvoices, setLoadingInvoices] = useState<boolean>(true);
 
-  const [timesheetEntries, setTimesheetEntries] = useState<TimesheetEntry[]>(initialTimesheetEntries);
-  const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
-
-  // Fetch employees from Firestore on mount and listen for real-time updates
+  // Fetch all data on initial load
   useEffect(() => {
-    setLoadingEmployees(true);
-    const employeesCollectionRef = collection(db, "employees");
-    const q = query(employeesCollectionRef, orderBy("name")); // Order by name
+    const fetchData = async () => {
+      try {
+        setLoadingEmployees(true);
+        const empResponse = await fetch('/api/employees');
+        if (!empResponse.ok) throw new Error(`Failed to fetch employees (Status: ${empResponse.status})`);
+        const empData: Employee[] = await empResponse.json();
+        setEmployees(empData.map(emp => ({
+            ...emp,
+            documents: Array.isArray(emp.documents) ? emp.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+            startDate: emp.startDate ? new Date(emp.startDate) : null,
+            actualSalary: emp.actualSalary === undefined ? null : emp.actualSalary,
+        })).sort((a, b) => a.name.localeCompare(b.name)));
+      } catch (error) {
+        console.error("Error fetching employees:", error);
+        toast({ title: "Error", description: "Could not load employee data.", variant: "destructive"});
+      } finally {
+        setLoadingEmployees(false);
+      }
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const fetchedEmployees: Employee[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        fetchedEmployees.push({ 
-          id: doc.id, 
-          name: data.name,
-          email: data.email,
-          documents: (data.documents || []).map((d: any) => ({
-            ...d,
-            // Firestore timestamps need to be converted to JS Date objects
-            uploadedAt: d.uploadedAt instanceof Timestamp ? d.uploadedAt.toDate() : new Date(d.uploadedAt) 
-          })),
-        });
-      });
-      setEmployees(fetchedEmployees);
-      setLoadingEmployees(false);
-    }, (error) => {
-      console.error("Error fetching employees:", error);
-      setLoadingEmployees(false);
-      // Handle error appropriately in UI
-    });
+      try {
+        setLoadingRevenue(true);
+        const revResponse = await fetch('/api/revenue');
+        if (!revResponse.ok) throw new Error(`Failed to fetch revenue (Status: ${revResponse.status})`);
+        const revData: RevenueEntry[] = await revResponse.json();
+        setRevenueEntries(revData.map(r => ({...r, date: new Date(r.date)})));
+      } catch (error) {
+        console.error("Error fetching revenue:", error);
+        toast({ title: "Error", description: "Could not load revenue data.", variant: "destructive"});
+      } finally {
+        setLoadingRevenue(false);
+      }
 
-    return () => unsubscribe(); // Cleanup listener on unmount
-  }, []);
+      try {
+        setLoadingExpenses(true);
+        const expResponse = await fetch('/api/expenses');
+        if (!expResponse.ok) throw new Error(`Failed to fetch expenses (Status: ${expResponse.status})`);
+        const expData: ExpenseEntry[] = await expResponse.json();
+        setExpenseEntries(expData.map(e => ({...e, date: new Date(e.date)})));
+      } catch (error) {
+        console.error("Error fetching expenses:", error);
+        toast({ title: "Error", description: "Could not load expense data.", variant: "destructive"});
+      } finally {
+        setLoadingExpenses(false);
+      }
 
-
-  const addRevenueEntry = useCallback((entry: Omit<RevenueEntry, 'id' | 'date'> & { date: string | Date }) => {
-    const newEntry: RevenueEntry = { 
-      ...entry, 
-      id: uuidv4(), 
-      date: typeof entry.date === 'string' ? new Date(entry.date) : entry.date 
+      try {
+        setLoadingInvoices(true);
+        const invResponse = await fetch('/api/invoices');
+        if (!invResponse.ok) throw new Error(`Failed to fetch invoices (Status: ${invResponse.status})`);
+        const invData: Invoice[] = await invResponse.json();
+        setInvoices(invData.map(i => ({
+            ...i, 
+            invoiceDate: new Date(i.invoiceDate), 
+            dueDate: new Date(i.dueDate)
+        })));
+      } catch (error) {
+        console.error("Error fetching invoices:", error);
+        toast({ title: "Error", description: "Could not load invoice data.", variant: "destructive"});
+      } finally {
+        setLoadingInvoices(false);
+      }
     };
-    setRevenueEntries(prev => [...prev, newEntry].sort((a, b) => b.date.getTime() - a.date.getTime()));
-  }, []);
+    fetchData();
+  }, [toast]);
 
-  const addExpenseEntry = useCallback((entry: Omit<ExpenseEntry, 'id' | 'date'> & { date: string | Date }) => {
-    const newEntry: ExpenseEntry = { 
-      ...entry, 
-      id: uuidv4(), 
-      date: typeof entry.date === 'string' ? new Date(entry.date) : entry.date 
-    };
-    setExpenseEntries(prev => [...prev, newEntry].sort((a, b) => b.date.getTime() - a.date.getTime()));
-  }, []);
 
-  const addAppointment = useCallback((entry: Omit<Appointment, 'id' | 'date'> & { date: string | Date }) => {
-    const newAppointment: Appointment = {
-      ...entry,
-      id: uuidv4(),
-      date: typeof entry.date === 'string' ? new Date(entry.date) : entry.date,
-    };
-    setAppointments(prev => [...prev, newAppointment].sort((a,b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time)));
-  }, []);
-
-  // --- Employee Functions (Firestore) ---
-  const addEmployee = useCallback(async (employeeData: Omit<Employee, 'id' | 'documents'>): Promise<Employee | null> => {
+  const addRevenueEntry = useCallback(async (entry: Omit<RevenueEntry, 'id' | 'date'> & { date: string | Date }) => {
+    setLoadingRevenue(true);
     try {
-      const docRef = await addDoc(collection(db, "employees"), {
-        ...employeeData,
-        documents: [], // Initialize with empty documents array
-        createdAt: serverTimestamp() // Optional: add a server timestamp
+      const response = await fetch('/api/revenue', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...entry,
+          date: typeof entry.date === 'string' ? entry.date : entry.date.toISOString(),
+        }),
       });
-      // We don't get the full doc back immediately with serverTimestamp, 
-      // but onSnapshot will update the local state.
-      // For immediate use, we can construct a partial object or re-fetch.
-      // For simplicity, we rely on onSnapshot for UI update.
-      return { ...employeeData, id: docRef.id, documents: [] };
-    } catch (error) {
-      console.error("Error adding employee: ", error);
-      return null;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({message: `Failed to add revenue entry (Status: ${response.status})`}));
+        throw new Error(errorData.message || `Failed to add revenue entry (Status: ${response.status})`);
+      }
+      const newEntry: RevenueEntry = await response.json();
+      setRevenueEntries(prev => [...prev, {...newEntry, date: new Date(newEntry.date)}].sort((a, b) => b.date.getTime() - a.date.getTime()));
+    } catch (error: any) {
+      console.error("Error adding revenue entry:", error);
+      toast({ title: "Error", description: error.message || "Could not add revenue entry.", variant: "destructive"});
+    } finally {
+      setLoadingRevenue(false);
     }
-  }, []);
+  }, [toast]);
+
+  const addExpenseEntry = useCallback(async (entry: Omit<ExpenseEntry, 'id' | 'date'> & { date: string | Date }) => {
+    setLoadingExpenses(true);
+    try {
+      const payload = {
+        ...entry,
+        date: typeof entry.date === 'string' ? entry.date : entry.date.toISOString(),
+        documentFileName: entry.documentFileName || undefined,
+        documentFileType: entry.documentFileType || undefined,
+        documentFileSize: entry.documentFileSize || undefined,
+        submittedBy: entry.submittedBy || undefined,
+      };
+      const response = await fetch('/api/expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({message: `Failed to add expense entry (Status: ${response.status})`}));
+        throw new Error(errorData.message || `Failed to add expense entry (Status: ${response.status})`);
+      }
+      const newEntry: ExpenseEntry = await response.json();
+      setExpenseEntries(prev => [...prev, {...newEntry, date: new Date(newEntry.date)}].sort((a, b) => b.date.getTime() - a.date.getTime()));
+    } catch (error: any) {
+      console.error("Error adding expense entry:", error);
+      toast({ title: "Error", description: error.message || "Could not add expense entry.", variant: "destructive"});
+    } finally {
+      setLoadingExpenses(false);
+    }
+  }, [toast]);
+
+  const addEmployee = useCallback(async (employeeData: Omit<Employee, 'id' | 'documents'>): Promise<Employee | null> => {
+    setLoadingEmployees(true);
+    try {
+      const response = await fetch('/api/employees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(employeeData),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({message: `Failed to add employee (Status: ${response.status})`}));
+        throw new Error(errorData.message || `Failed to add employee (Status: ${response.status})`);
+      }
+      const newEmployee: Employee = await response.json();
+      const processedEmployee = {
+        ...newEmployee,
+        documents: Array.isArray(newEmployee.documents) ? newEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+        startDate: newEmployee.startDate ? new Date(newEmployee.startDate) : null,
+        actualSalary: newEmployee.actualSalary === undefined ? null : newEmployee.actualSalary,
+      };
+      setEmployees(prev => [...prev, processedEmployee].sort((a, b) => a.name.localeCompare(b.name)));
+      return processedEmployee;
+    } catch (error: any) {
+      console.error("Error adding employee via API:", error);
+      toast({ title: "Error Adding Employee", description: error.message || "Failed to add employee.", variant: "destructive" });
+      return null;
+    } finally {
+      setLoadingEmployees(false);
+    }
+  }, [toast]);
   
   const getEmployeeById = useCallback(async (employeeId: string): Promise<Employee | undefined> => {
-    // This function could fetch from local state if already populated by onSnapshot
-    // or directly fetch from Firestore if needed for a one-off.
-    // For now, it uses the local state which is updated by onSnapshot.
-    const employee = employees.find(emp => emp.id === employeeId);
-    if (employee) return employee;
-
-    // Fallback to direct fetch if not found (e.g., if onSnapshot hasn't updated yet)
+    setLoadingEmployees(true);
     try {
-      const docRef = doc(db, "employees", employeeId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        return { 
-          id: docSnap.id,
-          name: data.name,
-          email: data.email,
-          documents: (data.documents || []).map((d: any) => ({
-             ...d,
-            uploadedAt: d.uploadedAt instanceof Timestamp ? d.uploadedAt.toDate() : new Date(d.uploadedAt)
-          })),
-        } as Employee;
-      } else {
-        console.log("No such employee document!");
-        return undefined;
+      const response = await fetch(`/api/employees/${employeeId}`);
+      if (!response.ok) {
+        if (response.status === 404) return undefined; 
+        const errorData = await response.json().catch(() => ({message: `Failed to fetch employee ${employeeId} (Status: ${response.status})`}));
+        throw new Error(errorData.message || `Failed to fetch employee ${employeeId} (Status: ${response.status})`);
       }
-    } catch (error) {
-      console.error("Error getting employee by ID:", error);
+      const employee: Employee = await response.json();
+      return {
+        ...employee,
+        documents: Array.isArray(employee.documents) ? employee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+        startDate: employee.startDate ? new Date(employee.startDate) : null,
+        actualSalary: employee.actualSalary === undefined ? null : employee.actualSalary,
+      };
+    } catch (error: any) {
+      console.error(`Error fetching employee ${employeeId} from API:`, error);
+      toast({ title: "Error", description: error.message || `Could not load data for employee ${employeeId}.`, variant: "destructive"});
       return undefined;
+    } finally {
+      setLoadingEmployees(false);
     }
-  }, [employees]);
+  }, [toast]);
 
-
-  const addEmployeeDocument = useCallback(async (employeeId: string, documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'>): Promise<void> => {
-    const employeeRef = doc(db, "employees", employeeId);
+  const addEmployeeDocument = useCallback(async (employeeId: string, documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'>): Promise<Employee | null> => {
+    setLoadingEmployees(true); 
     try {
-      const employeeDoc = await getDoc(employeeRef);
-      if (employeeDoc.exists()) {
-        const currentData = employeeDoc.data();
-        const existingDocuments = (currentData?.documents || []).map((d: any) => ({
-            ...d,
-            uploadedAt: d.uploadedAt instanceof Timestamp ? d.uploadedAt.toDate() : new Date(d.uploadedAt)
-        }));
-        
-        const newDocument: EmployeeDocument = {
-          ...documentData,
-          id: uuidv4(), // Generate a unique ID for the document within the array
-          uploadedAt: new Date() // Use client-side date, or serverTimestamp for sub-field
-        };
+      const response = await fetch(`/api/employees/${employeeId}/documents`, {
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(documentData),
+      });
 
-        await updateDoc(employeeRef, {
-          documents: [...existingDocuments, newDocument].sort((a,b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())
-        });
-        // Local state will update via onSnapshot
-      } else {
-        console.error("Employee not found for adding document");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({message: `Failed to add document (Status: ${response.status})`}));
+        throw new Error(errorData.message || `Failed to add document (Status: ${response.status})`);
       }
-    } catch (error) {
-      console.error("Error adding employee document: ", error);
+      const updatedEmployee: Employee = await response.json(); 
+      const processedEmployee = {
+        ...updatedEmployee,
+        documents: Array.isArray(updatedEmployee.documents) ? updatedEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+        startDate: updatedEmployee.startDate ? new Date(updatedEmployee.startDate) : null,
+        actualSalary: updatedEmployee.actualSalary === undefined ? null : updatedEmployee.actualSalary,
+      };
+      setEmployees(prev => prev.map(emp => emp.id === employeeId ? processedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
+      return processedEmployee;
+    } catch (error: any) {
+      console.error("Error adding employee document via API:", error);
+      toast({ title: "Error Adding Document", description: error.message || "Failed to add document.", variant: "destructive" });
+      return null;
+    } finally {
+      setLoadingEmployees(false);
     }
-  }, []);
+  }, [toast]);
 
-  const deleteEmployeeDocument = useCallback(async (employeeId: string, documentId: string): Promise<void> => {
-    const employeeRef = doc(db, "employees", employeeId);
+  const deleteEmployeeDocument = useCallback(async (employeeId: string, documentId: string): Promise<Employee | null> => {
+    setLoadingEmployees(true);
     try {
-      const employeeDoc = await getDoc(employeeRef);
-      if (employeeDoc.exists()) {
-        const currentData = employeeDoc.data();
-        const updatedDocuments = (currentData?.documents || [])
-          .map((d: any) => ({
-            ...d,
-            uploadedAt: d.uploadedAt instanceof Timestamp ? d.uploadedAt.toDate() : new Date(d.uploadedAt)
-           }))
-          .filter((doc: EmployeeDocument) => doc.id !== documentId);
-        
-        await updateDoc(employeeRef, {
-          documents: updatedDocuments
-        });
-        // Local state will update via onSnapshot
-      } else {
-        console.error("Employee not found for deleting document");
+      const response = await fetch(`/api/employees/${employeeId}/documents/${documentId}`, {
+          method: 'DELETE',
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({message: `Failed to delete document (Status: ${response.status})`}));
+        throw new Error(errorData.message || `Failed to delete document (Status: ${response.status})`);
       }
-    } catch (error) {
-      console.error("Error deleting employee document: ", error);
+      const updatedEmployee: Employee = await response.json();
+      const processedEmployee = {
+        ...updatedEmployee,
+        documents: Array.isArray(updatedEmployee.documents) ? updatedEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+        startDate: updatedEmployee.startDate ? new Date(updatedEmployee.startDate) : null,
+        actualSalary: updatedEmployee.actualSalary === undefined ? null : updatedEmployee.actualSalary,
+      };
+      setEmployees(prev => prev.map(emp => emp.id === employeeId ? processedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
+      return processedEmployee;
+    } catch (error: any) {
+      console.error("Error deleting employee document via API:", error);
+      toast({ title: "Error Deleting Document", description: error.message || "Failed to delete document.", variant: "destructive" });
+      return null;
+    } finally {
+      setLoadingEmployees(false);
     }
-  }, []);
-
-
-  // --- Other data functions (still in-memory) ---
-  const addTimesheetEntry = useCallback((entry: Omit<TimesheetEntry, 'id'>) => {
-    const newEntry: TimesheetEntry = { ...entry, id: uuidv4() };
-    setTimesheetEntries(prev => [...prev, newEntry].sort((a,b) => b.date.getTime() - a.date.getTime()));
-  }, []);
-
-  const getTimesheetsByEmployee = useCallback((employeeId: string) => {
-    return timesheetEntries.filter(ts => ts.employeeId === employeeId).sort((a,b) => b.date.getTime() - a.date.getTime());
-  }, [timesheetEntries]);
-
+  }, [toast]);
+  
   const getNextInvoiceNumber = useCallback(() => {
     const year = new Date().getFullYear();
-    const nextNum = invoices.filter(inv => inv.invoiceNumber.startsWith(`INV-${year}`)).length + 1;
+    const yearInvoices = invoices.filter(inv => inv.invoiceNumber.startsWith(`INV-${year}`));
+    const nextNum = yearInvoices.length + 1;
     return `INV-${year}-${String(nextNum).padStart(4, '0')}`;
   }, [invoices]);
 
-  const addInvoice = useCallback((invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>) => {
-    const subTotal = invoiceData.lineItems.reduce((sum, item) => sum + ((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)), 0);
-    const taxAmount = subTotal * invoiceData.taxRate;
-    const grandTotal = subTotal + taxAmount;
-    
-    const newInvoice: Invoice = {
+  const addInvoice = useCallback(async (invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>): Promise<Invoice | null> => {
+    setLoadingInvoices(true);
+    const payload = {
       ...invoiceData,
-      id: uuidv4(),
+      invoiceDate: typeof invoiceData.invoiceDate === 'string' ? invoiceData.invoiceDate : invoiceData.invoiceDate.toISOString(),
+      dueDate: typeof invoiceData.dueDate === 'string' ? invoiceData.dueDate : invoiceData.dueDate.toISOString(),
       invoiceNumber: getNextInvoiceNumber(),
-      lineItems: invoiceData.lineItems.map(item => ({
-        description: item.description,
-        quantity: Number(item.quantity) || 0,
-        unitPrice: Number(item.unitPrice) || 0,
-        id: uuidv4(), 
-        total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
-      })),
-      subTotal,
-      taxAmount,
-      grandTotal,
+      customColumnHeader: invoiceData.customColumnHeader || undefined,
+      lineItems: invoiceData.lineItems.map(li => ({...li, customColumnValue: li.customColumnValue || undefined})),
     };
-    setInvoices(prev => [...prev, newInvoice].sort((a, b) => b.invoiceDate.getTime() - a.invoiceDate.getTime()));
-    return newInvoice;
-  }, [getNextInvoiceNumber, invoices]); // Added invoices to dependency array for getNextInvoiceNumber
+    try {
+      const response = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({message: `Failed to add invoice (Status: ${response.status})`}));
+        throw new Error(errorData.message || `Failed to add invoice (Status: ${response.status})`);
+      }
+      const newInvoice: Invoice = await response.json();
+      const processedInvoice = {
+        ...newInvoice,
+        invoiceDate: new Date(newInvoice.invoiceDate),
+        dueDate: new Date(newInvoice.dueDate),
+      };
+      setInvoices(prev => [...prev, processedInvoice].sort((a, b) => new Date(b.invoiceDate).getTime() - new Date(a.invoiceDate).getTime()));
+      return processedInvoice;
+    } catch (error: any) {
+      console.error("Error adding invoice:", error);
+      toast({ title: "Error Adding Invoice", description: error.message || "Could not add invoice.", variant: "destructive"});
+      return null;
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }, [toast, getNextInvoiceNumber, invoices]); 
 
-  const updateInvoiceStatus = useCallback((invoiceId: string, status: Invoice['status']) => {
-    setInvoices(prevInvoices => 
-      prevInvoices.map(inv => 
-        inv.id === invoiceId 
-          ? { ...inv, status }
-          : inv
-      )
-    );
-  }, []);
+  const updateInvoice = useCallback(async (invoiceId: string, invoiceData: Partial<Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>>): Promise<Invoice | null> => {
+    setLoadingInvoices(true);
+    const payload = {
+      ...invoiceData,
+      invoiceDate: invoiceData.invoiceDate ? (typeof invoiceData.invoiceDate === 'string' ? invoiceData.invoiceDate : (invoiceData.invoiceDate as Date).toISOString()) : undefined,
+      dueDate: invoiceData.dueDate ? (typeof invoiceData.dueDate === 'string' ? invoiceData.dueDate : (invoiceData.dueDate as Date).toISOString()) : undefined,
+      customColumnHeader: invoiceData.customColumnHeader || undefined,
+      lineItems: invoiceData.lineItems?.map(li => ({...li, customColumnValue: li.customColumnValue || undefined})),
+    };
+    try {
+      const response = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({message: `Failed to update invoice (Status: ${response.status})`}));
+        throw new Error(errorData.message || `Failed to update invoice (Status: ${response.status})`);
+      }
+      const updatedInvoice: Invoice = await response.json();
+      const processedInvoice = {
+        ...updatedInvoice,
+        invoiceDate: new Date(updatedInvoice.invoiceDate),
+        dueDate: new Date(updatedInvoice.dueDate),
+      };
+      setInvoices(prevInvoices => 
+        prevInvoices.map(inv => 
+          inv.id === invoiceId 
+            ? processedInvoice
+            : inv
+        ).sort((a, b) => new Date(b.invoiceDate).getTime() - new Date(a.invoiceDate).getTime())
+      );
+      return processedInvoice;
+    } catch (error: any) {
+      console.error("Error updating invoice:", error);
+      toast({ title: "Error Updating Invoice", description: error.message || "Could not update invoice.", variant: "destructive"});
+      return null;
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }, [toast]);
+
+  const updateInvoiceStatus = useCallback(async (invoiceId: string, status: Invoice['status']) => {
+    setLoadingInvoices(true);
+    try {
+      const response = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }), 
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({message: `Failed to update invoice status (Status: ${response.status})`}));
+        toast({ title: "Error Updating Invoice Status", description: errorData.message || "Could not update invoice status.", variant: "destructive"});
+        return; // Return early if API call failed
+      }
+      const updatedInvoice: Invoice = await response.json();
+      setInvoices(prevInvoices => 
+        prevInvoices.map(inv => 
+          inv.id === invoiceId 
+            ? { ...updatedInvoice, invoiceDate: new Date(updatedInvoice.invoiceDate), dueDate: new Date(updatedInvoice.dueDate) }
+            : inv
+        )
+      );
+    } catch (error: any) {
+        console.error("Error updating invoice status:", error);
+        toast({ title: "Error Updating Invoice Status", description: error.message || "Could not update invoice status.", variant: "destructive"});
+    } finally {
+      setLoadingInvoices(false); // Ensure loading is set to false in all cases
+    }
+  }, [toast]);
 
   const getInvoiceById = useCallback((invoiceId: string) => {
     return invoices.find(inv => inv.id === invoiceId);
   }, [invoices]);
+
 
   const totalRevenue = useMemo(() => revenueEntries.reduce((sum, entry) => sum + entry.amount, 0), [revenueEntries]);
   const totalExpenses = useMemo(() => expenseEntries.reduce((sum, entry) => sum + entry.amount, 0), [expenseEntries]);
@@ -297,27 +416,26 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     <AppDataContext.Provider value={{ 
       revenueEntries, 
       expenseEntries, 
-      appointments, 
-      employees, // From Firestore
-      timesheetEntries,
+      employees, 
       invoices,
       addRevenueEntry, 
       addExpenseEntry,
-      addAppointment,
-      addEmployee, // Firestore
-      addEmployeeDocument, // Firestore
-      deleteEmployeeDocument, // Firestore
-      getEmployeeById, // Firestore
-      addTimesheetEntry,
-      getTimesheetsByEmployee,
+      addEmployee, 
+      addEmployeeDocument, 
+      deleteEmployeeDocument, 
+      getEmployeeById, 
       addInvoice,
+      updateInvoice,
       updateInvoiceStatus,
       getInvoiceById,
       getNextInvoiceNumber,
       totalRevenue,
       totalExpenses,
       netProfit,
-      loadingEmployees
+      loadingEmployees,
+      loadingRevenue,
+      loadingExpenses,
+      loadingInvoices,
     }}>
       {children}
     </AppDataContext.Provider>
