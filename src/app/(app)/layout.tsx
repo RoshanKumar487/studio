@@ -20,7 +20,7 @@ import {
 import { AppLogo } from '@/components/shared/app-logo';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LayoutDashboard, CalendarDays, TrendingUp, TrendingDown, Sparkles, Users, FileText, Clock, FileSpreadsheet, PanelLeft } from 'lucide-react';
+import { LayoutDashboard, CalendarDays, TrendingUp, TrendingDown, Sparkles, Users, FileSpreadsheet, PanelLeft } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -28,7 +28,6 @@ const navItems = [
   { href: '/revenue', label: 'Revenue', icon: TrendingUp },
   { href: '/expenses', label: 'Expenses', icon: TrendingDown },
   { href: '/hr', label: 'HR & Employees', icon: Users },
-  { href: '/timesheets', label: 'Timesheets', icon: Clock },
   { href: '/invoicing', label: 'Invoicing', icon: FileSpreadsheet },
   { href: '/ai-scheduler', label: 'AI Scheduler', icon: Sparkles },
 ];
@@ -102,4 +101,3 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     </AppDataProvider>
   );
 }
-

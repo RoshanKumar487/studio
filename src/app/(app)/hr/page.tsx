@@ -16,16 +16,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DatePicker } from '@/components/shared/date-picker';
+import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning, CalendarDays } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Image from 'next/image';
 
+const employmentTypes = ['Full-time', 'Part-time', 'Contract'] as const;
+
 const employeeSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters.").max(100),
   email: z.string().email("Invalid email address.").optional().or(z.literal('')),
+  jobTitle: z.string().max(100, "Job title too long.").optional().or(z.literal('')),
+  startDate: z.date().nullable().optional(),
+  employmentType: z.enum(employmentTypes).optional(),
 });
 type EmployeeFormData = z.infer<typeof employeeSchema>;
 
@@ -52,7 +59,7 @@ export default function HrPage() {
 
   const employeeForm = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
-    defaultValues: { name: '', email: '' },
+    defaultValues: { name: '', email: '', jobTitle: '', startDate: null, employmentType: undefined },
   });
 
   const documentForm = useForm<DocumentFormData>({
@@ -60,7 +67,6 @@ export default function HrPage() {
     defaultValues: { name: '', description: '' },
   });
 
-  // Clean up object URLs
   useEffect(() => {
     return () => {
       if (imagePreviewUrl) {
@@ -73,7 +79,7 @@ export default function HrPage() {
     const newEmployee = await addEmployee(data);
     if (newEmployee) {
       toast({ title: "Employee Added", description: `${data.name} has been added.` });
-      employeeForm.reset();
+      employeeForm.reset({ name: '', email: '', jobTitle: '', startDate: null, employmentType: undefined });
       setIsEmployeeFormOpen(false);
     } else {
       toast({ title: "Error", description: `Failed to add employee ${data.name}.`, variant: "destructive" });
@@ -141,7 +147,7 @@ export default function HrPage() {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      documentForm.setValue("name", file.name.split('.').slice(0, -1).join('.') || file.name); // Pre-fill name from filename
+      documentForm.setValue("name", file.name.split('.').slice(0, -1).join('.') || file.name);
       if (file.type.startsWith('image/')) {
         setImagePreviewUrl(URL.createObjectURL(file));
       }
@@ -182,10 +188,10 @@ export default function HrPage() {
           <DialogTrigger asChild>
             <Button><PlusCircle className="mr-2 h-5 w-5" /> Add Employee</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader><DialogTitle className="font-headline">New Employee</DialogTitle></DialogHeader>
             <Form {...employeeForm}>
-              <form onSubmit={employeeForm.handleSubmit(onEmployeeSubmit)} className="space-y-4">
+              <form onSubmit={employeeForm.handleSubmit(onEmployeeSubmit)} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
                 <FormField control={employeeForm.control} name="name" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Full Name</FormLabel>
@@ -195,12 +201,38 @@ export default function HrPage() {
                 )} />
                 <FormField control={employeeForm.control} name="email" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email (Optional)</FormLabel>
+                    <FormLabel>Email</FormLabel>
                     <FormControl><Input type="email" placeholder="e.g., jane.doe@example.com" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <DialogFooter>
+                <FormField control={employeeForm.control} name="jobTitle" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Job Title</FormLabel>
+                    <FormControl><Input placeholder="e.g., Software Engineer" {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                 <FormField control={employeeForm.control} name="startDate" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Start Date</FormLabel>
+                    <DatePicker date={field.value || undefined} setDate={field.onChange} />
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={employeeForm.control} name="employmentType" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Employment Type</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select employment type" /></SelectTrigger></FormControl>
+                      <SelectContent>
+                        {employmentTypes.map(type => (<SelectItem key={type} value={type}>{type}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <DialogFooter className="pt-4">
                   <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
                   <Button type="submit">Add Employee</Button>
                 </DialogFooter>
@@ -224,8 +256,10 @@ export default function HrPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
+                  <TableHead>Job Title</TableHead>
+                  <TableHead>Start Date</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead className="text-center">Documents</TableHead>
+                  <TableHead className="text-center">Docs</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -233,11 +267,13 @@ export default function HrPage() {
                 {employees.map((employee) => (
                   <TableRow key={employee.id}>
                     <TableCell className="font-medium">{employee.name}</TableCell>
+                    <TableCell>{employee.jobTitle || 'N/A'}</TableCell>
+                    <TableCell>{employee.startDate ? format(new Date(employee.startDate), "PPP") : 'N/A'}</TableCell>
                     <TableCell>{employee.email || 'N/A'}</TableCell>
                     <TableCell className="text-center">{employee.documents.length}</TableCell>
                     <TableCell className="text-right">
                       <Button variant="outline" size="sm" onClick={() => openDocumentDialog(employee.id)}>
-                        <FileText className="mr-2 h-4 w-4" /> Manage Documents
+                        <FileText className="mr-2 h-4 w-4" /> Manage Docs
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -262,7 +298,7 @@ export default function HrPage() {
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="font-headline">Manage Documents for {selectedEmployee?.name}</DialogTitle>
-            <CardDescription>Add new document records or view existing ones. Employee data is stored in Firestore. File metadata is stored, but actual file content upload to cloud storage is not implemented in this demo.</CardDescription>
+            <CardDescription>Add new document records or view existing ones. Employee data is stored in MongoDB. File metadata is stored, but actual file content upload to cloud storage is not implemented in this demo.</CardDescription>
           </DialogHeader>
           
           <Card>
@@ -324,7 +360,7 @@ export default function HrPage() {
                     )}
                   </div>
                    <FormDescription className="text-xs">
-                        Adding a record stores metadata (name, description, file details) in Firestore.
+                        Adding a record stores metadata (name, description, file details) in MongoDB.
                         The "Download Selected File" button works only for the file currently chosen above and downloads it from your browser, not from cloud storage.
                     </FormDescription>
                 </form>
@@ -356,7 +392,7 @@ export default function HrPage() {
                              </Badge>
                           ) : <span className="text-muted-foreground text-xs">No file attached</span>}
                         </TableCell>
-                        <TableCell>{format(doc.uploadedAt, "PPP p")}</TableCell>
+                        <TableCell>{format(new Date(doc.uploadedAt), "PPP p")}</TableCell>
                         <TableCell className="text-right space-x-1">
                           <Button variant="ghost" size="icon" onClick={() => handleOpenPreviewDialog(doc)} aria-label="Preview document metadata">
                             <Eye className="h-4 w-4" />
@@ -391,7 +427,7 @@ export default function HrPage() {
             <div className="space-y-3 py-4">
               <p><span className="font-semibold">Document Title:</span> {documentToPreview.name}</p>
               <p><span className="font-semibold">Description:</span> {documentToPreview.description || "N/A"}</p>
-              <p><span className="font-semibold">Record Added:</span> {format(documentToPreview.uploadedAt, "PPP p")}</p>
+              <p><span className="font-semibold">Record Added:</span> {format(new Date(documentToPreview.uploadedAt), "PPP p")}</p>
               {documentToPreview.fileName ? (
                 <>
                   <p><span className="font-semibold">Attached File Name:</span> {documentToPreview.fileName}</p>
@@ -405,7 +441,7 @@ export default function HrPage() {
                 <InfoIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 <AlertTitle className="text-blue-700 dark:text-blue-300">Important Note on File Handling</AlertTitle>
                 <AlertDescription className="text-xs text-blue-600 dark:text-blue-400">
-                  This application demo stores document metadata (like name and file details) in Firestore.
+                  This application demo stores document metadata (like name and file details) in MongoDB.
                   Actual file content (the file itself) is not uploaded to or stored on any server or cloud storage.
                   Therefore, direct preview or download of previously "uploaded" files from this dialog is not possible.
                   The "Download Selected File" button in the "Add Document Record" form only works for the file currently selected in your browser before its metadata is saved.
@@ -453,4 +489,3 @@ export default function HrPage() {
     </div>
   );
 }
-

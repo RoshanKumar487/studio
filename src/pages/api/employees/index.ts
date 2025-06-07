@@ -8,13 +8,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const uri = process.env.MONGODB_URI;
 
   if (!uri) {
+    const warningMessage = "MONGODB_URI is not configured. Employee data operations will be limited/mocked. Please set MONGODB_URI in your .env.local file and restart the server for real data.";
     console.warn("**************************************************************************************");
-    console.warn("WARNING: MONGODB_URI is not configured. Employee data operations will be limited/mocked.");
-    console.warn("Please set MONGODB_URI in your .env.local file and restart the server for real data.");
+    console.warn(`WARNING: ${warningMessage}`);
     console.warn("**************************************************************************************");
 
     if (req.method === 'GET') {
-      const mockEmployees: Employee[] = []; // Return empty array
+      const mockEmployees: Employee[] = []; 
       return res.status(200).json(mockEmployees);
     }
     if (req.method === 'POST') {
@@ -24,33 +24,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ message: `Method ${req.method} Not Allowed without DB config` });
   }
 
-  // If URI is configured, proceed with actual database logic
   let client: MongoClient | null = null;
   try {
     client = new MongoClient(uri, { serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true }});
     await client.connect();
-    // Ensure you have a database named "bizViewApp" or change this to your actual database name
     const db = client.db("bizViewApp"); 
     const employeesCollection = db.collection<Omit<Employee, 'id'> & { _id?: ObjectId }>('employees');
 
     if (req.method === 'GET') {
-      const employees = await employeesCollection.find({}).sort({ name: 1 }).toArray();
-      // Ensure documents field is always an array, even if null/undefined in DB
-      res.status(200).json(employees.map(emp => ({ ...emp, id: emp._id!.toString(), documents: emp.documents || [] })));
+      const employeesFromDb = await employeesCollection.find({}).sort({ name: 1 }).toArray();
+      const employees = employeesFromDb.map(emp => ({ 
+        ...emp, 
+        id: emp._id!.toString(), 
+        documents: emp.documents || [],
+        startDate: emp.startDate ? new Date(emp.startDate) : null,
+      }));
+      res.status(200).json(employees);
     } else if (req.method === 'POST') {
-      const { name, email } = req.body as Omit<Employee, 'id' | 'documents'>;
+      const { name, email, jobTitle, startDate, employmentType } = req.body as Omit<Employee, 'id' | 'documents'>;
       if (!name) {
         return res.status(400).json({ message: 'Employee name is required.' });
       }
       const newEmployeeData = {
         name,
-        email: email || undefined, // Store undefined if email is empty string or not provided
-        documents: [] as EmployeeDocument[], // Initialize with an empty documents array
+        email: email || undefined, 
+        jobTitle: jobTitle || undefined,
+        startDate: startDate ? new Date(startDate) : undefined,
+        employmentType: employmentType || undefined,
+        documents: [] as EmployeeDocument[], 
         createdAt: new Date(),
+        updatedAt: new Date(),
       };
       const result = await employeesCollection.insertOne(newEmployeeData);
-      // Return the full employee object including the generated _id as id
-      const createdEmployee = { ...newEmployeeData, id: result.insertedId.toString() };
+      const createdEmployee = { 
+        ...newEmployeeData, 
+        id: result.insertedId.toString(),
+        startDate: newEmployeeData.startDate || null, // ensure it's null if undefined for client
+      };
       res.status(201).json(createdEmployee);
     } else {
       res.setHeader('Allow', ['GET', 'POST']);

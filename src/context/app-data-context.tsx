@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { RevenueEntry, ExpenseEntry, Appointment, Employee, EmployeeDocument, TimesheetEntry, Invoice } from '@/lib/types';
+import type { RevenueEntry, ExpenseEntry, Appointment, Employee, EmployeeDocument, Invoice } from '@/lib/types';
 import React, { createContext, useContext, useState, ReactNode, useCallback, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -10,7 +10,6 @@ interface AppDataContextType {
   expenseEntries: ExpenseEntry[];
   appointments: Appointment[];
   employees: Employee[];
-  timesheetEntries: TimesheetEntry[];
   invoices: Invoice[];
 
   addRevenueEntry: (entry: Omit<RevenueEntry, 'id' | 'date'> & { date: string | Date }) => void;
@@ -21,9 +20,6 @@ interface AppDataContextType {
   addEmployeeDocument: (employeeId: string, documentData: Omit<EmployeeDocument, 'id' | 'uploadedAt'>) => Promise<Employee | null>;
   deleteEmployeeDocument: (employeeId: string, documentId: string) => Promise<Employee | null>;
   getEmployeeById: (employeeId: string) => Promise<Employee | undefined>; 
-
-  addTimesheetEntry: (entry: Omit<TimesheetEntry, 'id'>) => void;
-  getTimesheetsByEmployee: (employeeId: string) => TimesheetEntry[];
   
   addInvoice: (invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>) => Invoice;
   updateInvoiceStatus: (invoiceId: string, status: Invoice['status']) => void;
@@ -38,7 +34,6 @@ interface AppDataContextType {
 
 const AppDataContext = createContext<AppDataContextType | undefined>(undefined);
 
-// Sample initial data (will be replaced for employees)
 const initialRevenue: RevenueEntry[] = [
   { id: uuidv4(), date: new Date(2024, 6, 1), amount: 1200, description: "Web design project" },
   { id: uuidv4(), date: new Date(2024, 6, 5), amount: 750, description: "Consulting services" },
@@ -46,12 +41,13 @@ const initialRevenue: RevenueEntry[] = [
 const initialExpenses: ExpenseEntry[] = [
   { id: uuidv4(), date: new Date(2024, 6, 2), amount: 150, category: "Software", description: "Subscription for design tool" },
   { id: uuidv4(), date: new Date(2024, 6, 7), amount: 80, category: "Marketing", description: "Online ads" },
+  { id: uuidv4(), date: new Date(2024, 6, 10), amount: 250, category: "Utilities", description: "Office electricity bill" },
+  { id: uuidv4(), date: new Date(2024, 6, 12), amount: 65, category: "Office Supplies", description: "Stationery purchase" },
 ];
 const initialAppointments: Appointment[] = [
    { id: uuidv4(), date: new Date(new Date().setDate(new Date().getDate() + 2)), time: "10:00", title: "Client Meeting - John Doe" },
    { id: uuidv4(), date: new Date(new Date().setDate(new Date().getDate() + 3)), time: "14:30", title: "Project Sync - Team Alpha" },
 ];
-const initialTimesheetEntries: TimesheetEntry[] = [];
 const initialInvoices: Invoice[] = [];
 
 
@@ -63,10 +59,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [employees, setEmployees] = useState<Employee[]>([]); 
   const [loadingEmployees, setLoadingEmployees] = useState<boolean>(true);
 
-  const [timesheetEntries, setTimesheetEntries] = useState<TimesheetEntry[]>(initialTimesheetEntries);
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
 
-  // Fetch employees from API on mount
   useEffect(() => {
     const fetchEmployees = async () => {
       setLoadingEmployees(true);
@@ -82,21 +76,19 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               errorMessage += ` (Status: ${response.status})`;
             }
           } catch (e) {
-            // Failed to parse JSON, stick with generic status
             errorMessage += ` (Status: ${response.status})`;
           }
           throw new Error(errorMessage);
         }
         const data: Employee[] = await response.json();
-        // Ensure documents field is always an array after fetching
         const employeesWithEnsuredDocuments = data.map(emp => ({
             ...emp,
             documents: Array.isArray(emp.documents) ? emp.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+            startDate: emp.startDate ? new Date(emp.startDate) : null,
         }));
         setEmployees(employeesWithEnsuredDocuments.sort((a, b) => a.name.localeCompare(b.name)));
       } catch (error) {
         console.error("Error fetching employees from API:", error);
-        // Handle error appropriately in UI, e.g. set an error state
       } finally {
         setLoadingEmployees(false);
       }
@@ -132,7 +124,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setAppointments(prev => [...prev, newAppointment].sort((a,b) => a.date.getTime() - b.date.getTime() || a.time.localeCompare(b.time)));
   }, []);
 
-  // --- Employee Functions (Now using API routes) ---
   const addEmployee = useCallback(async (employeeData: Omit<Employee, 'id' | 'documents'>): Promise<Employee | null> => {
     setLoadingEmployees(true);
     try {
@@ -145,17 +136,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         let errorMessage = `Failed to add employee (Status: ${response.status})`;
         try {
           const errorData = await response.json();
-          if (errorData && errorData.message) {
-            errorMessage += `: ${errorData.message}`;
-          }
+          if (errorData && errorData.message) errorMessage += `: ${errorData.message}`;
         } catch (e) { /* Failed to parse JSON, stick with generic status */ }
         throw new Error(errorMessage);
       }
       const newEmployee: Employee = await response.json();
-      // Ensure documents is an array and dates are Date objects
       const processedEmployee = {
         ...newEmployee,
         documents: Array.isArray(newEmployee.documents) ? newEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+        startDate: newEmployee.startDate ? new Date(newEmployee.startDate) : null,
       };
       setEmployees(prev => [...prev, processedEmployee].sort((a, b) => a.name.localeCompare(b.name)));
       return processedEmployee;
@@ -176,17 +165,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         let errorMessage = `Failed to fetch employee ${employeeId} (Status: ${response.status})`;
          try {
           const errorData = await response.json();
-          if (errorData && errorData.message) {
-            errorMessage += `: ${errorData.message}`;
-          }
+          if (errorData && errorData.message) errorMessage += `: ${errorData.message}`;
         } catch (e) { /* Failed to parse JSON */ }
         throw new Error(errorMessage);
       }
       const employee: Employee = await response.json();
-      // Ensure documents field is always an array and dates are Date objects
       const processedEmployee = {
           ...employee,
           documents: Array.isArray(employee.documents) ? employee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+          startDate: employee.startDate ? new Date(employee.startDate) : null,
       };
       return processedEmployee;
     } catch (error) {
@@ -202,12 +189,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const newDocumentBase: Partial<EmployeeDocument> = {
       ...documentData,
       id: uuidv4(), 
-      uploadedAt: new Date() // Will be stringified in JSON, then rehydrated
+      uploadedAt: new Date() 
     };
     
     setLoadingEmployees(true);
     try {
-      // Fetch the current employee to ensure we have the latest documents array
       const currentEmployeeResponse = await fetch(`/api/employees/${employeeId}`);
       if (!currentEmployeeResponse.ok) {
         let errorMessage = `Failed to fetch employee before adding document (Status: ${currentEmployeeResponse.status})`;
@@ -230,17 +216,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         let errorMessage = `Failed to add employee document (Status: ${response.status})`;
         try {
           const errorData = await response.json();
-          if (errorData && errorData.message) {
-            errorMessage += `: ${errorData.message}`;
-          }
+          if (errorData && errorData.message) errorMessage += `: ${errorData.message}`;
         } catch (e) { /* Failed to parse JSON */ }
         throw new Error(errorMessage);
       }
       const updatedEmployee: Employee = await response.json();
-      // Ensure documents is an array and dates are Date objects
       const processedEmployee = {
         ...updatedEmployee,
         documents: Array.isArray(updatedEmployee.documents) ? updatedEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+        startDate: updatedEmployee.startDate ? new Date(updatedEmployee.startDate) : null,
       };
       setEmployees(prev => prev.map(emp => emp.id === employeeId ? processedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
       return processedEmployee;
@@ -255,7 +239,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const deleteEmployeeDocument = useCallback(async (employeeId: string, documentId: string): Promise<Employee | null> => {
     setLoadingEmployees(true);
     try {
-      // Fetch the current employee to ensure we have the latest documents array
       const currentEmployeeResponse = await fetch(`/api/employees/${employeeId}`);
       if (!currentEmployeeResponse.ok) {
          let errorMessage = `Failed to fetch employee before deleting document (Status: ${currentEmployeeResponse.status})`;
@@ -275,17 +258,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         let errorMessage = `Failed to delete employee document (Status: ${response.status})`;
         try {
           const errorData = await response.json();
-          if (errorData && errorData.message) {
-            errorMessage += `: ${errorData.message}`;
-          }
+          if (errorData && errorData.message) errorMessage += `: ${errorData.message}`;
         } catch (e) { /* Failed to parse JSON */ }
         throw new Error(errorMessage);
       }
       const updatedEmployee: Employee = await response.json();
-       // Ensure documents is an array and dates are Date objects
       const processedEmployee = {
         ...updatedEmployee,
         documents: Array.isArray(updatedEmployee.documents) ? updatedEmployee.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+        startDate: updatedEmployee.startDate ? new Date(updatedEmployee.startDate) : null,
       };
       setEmployees(prev => prev.map(emp => emp.id === employeeId ? processedEmployee : emp).sort((a,b) => a.name.localeCompare(b.name)));
       return processedEmployee;
@@ -296,17 +277,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setLoadingEmployees(false);
     }
   }, []);
-
-
-  // --- Other data functions (still in-memory) ---
-  const addTimesheetEntry = useCallback((entry: Omit<TimesheetEntry, 'id'>) => {
-    const newEntry: TimesheetEntry = { ...entry, id: uuidv4() };
-    setTimesheetEntries(prev => [...prev, newEntry].sort((a,b) => b.date.getTime() - a.date.getTime()));
-  }, []);
-
-  const getTimesheetsByEmployee = useCallback((employeeId: string) => {
-    return timesheetEntries.filter(ts => ts.employeeId === employeeId).sort((a,b) => b.date.getTime() - a.date.getTime());
-  }, [timesheetEntries]);
 
   const getNextInvoiceNumber = useCallback(() => {
     const year = new Date().getFullYear();
@@ -362,7 +332,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       expenseEntries, 
       appointments, 
       employees, 
-      timesheetEntries,
       invoices,
       addRevenueEntry, 
       addExpenseEntry,
@@ -371,8 +340,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       addEmployeeDocument, 
       deleteEmployeeDocument, 
       getEmployeeById, 
-      addTimesheetEntry,
-      getTimesheetsByEmployee,
       addInvoice,
       updateInvoiceStatus,
       getInvoiceById,
@@ -394,4 +361,3 @@ export function useAppData() {
   }
   return context;
 }
-

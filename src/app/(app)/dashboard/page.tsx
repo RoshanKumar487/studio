@@ -4,9 +4,20 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAppData } from "@/context/app-data-context";
-import { DollarSign, TrendingUp, TrendingDown, CalendarClock, Users, Building, Loader2 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { DollarSign, TrendingUp, TrendingDown, CalendarClock, Users, Building, Loader2, PieChartIcon } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { format, subDays, eachDayOfInterval } from 'date-fns';
+
+const PIE_CHART_COLORS = [
+  'hsl(var(--chart-1))', 
+  'hsl(var(--chart-2))', 
+  'hsl(var(--chart-3))', 
+  'hsl(var(--chart-4))', 
+  'hsl(var(--chart-5))',
+  'hsl(var(--primary))',
+  'hsl(var(--accent))',
+];
+
 
 export default function DashboardPage() {
   const { totalRevenue, totalExpenses, netProfit, revenueEntries, expenseEntries, appointments, employees, invoices, loadingEmployees } = useAppData();
@@ -15,7 +26,6 @@ export default function DashboardPage() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
-  // Data for charts - last 30 days
   const last30Days = useMemo(() => eachDayOfInterval({ start: subDays(new Date(), 29), end: new Date() }), []);
   
   const dailyChartData = useMemo(() => {
@@ -46,6 +56,16 @@ export default function DashboardPage() {
   const employeeCount = useMemo(() => employees.length, [employees]);
   const uniqueCustomerNames = useMemo(() => new Set(invoices.map(inv => inv.customerName)), [invoices]);
   const uniqueCustomerCount = useMemo(() => uniqueCustomerNames.size, [uniqueCustomerNames]);
+
+  const expensesByCategory = useMemo(() => {
+    const categoryMap: { [key: string]: number } = {};
+    expenseEntries.forEach(entry => {
+      categoryMap[entry.category] = (categoryMap[entry.category] || 0) + entry.amount;
+    });
+    return Object.entries(categoryMap)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value); // Sort for consistent pie chart display
+  }, [expenseEntries]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -112,8 +132,8 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="shadow-lg col-span-1 md:col-span-2">
+      <div className="grid gap-6 md:grid-cols-3">
+        <Card className="shadow-lg md:col-span-2">
           <CardHeader>
             <CardTitle className="font-headline">Daily Performance (Last 30 Days)</CardTitle>
           </CardHeader>
@@ -127,6 +147,7 @@ export default function DashboardPage() {
                   contentStyle={{ backgroundColor: "hsl(var(--background))", border: "1px solid hsl(var(--border))", borderRadius: "var(--radius)"}}
                   itemStyle={{ color: "hsl(var(--foreground))" }}
                   cursor={{ fill: "hsl(var(--muted))", opacity: 0.5 }}
+                  formatter={(value: number) => formatCurrency(value)}
                 />
                 <Legend wrapperStyle={{ color: "hsl(var(--foreground))" }}/>
                 <Bar dataKey="revenue" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Revenue" />
@@ -135,8 +156,54 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
+        
+        <Card className="shadow-lg md:col-span-1">
+          <CardHeader>
+            <CardTitle className="font-headline flex items-center">
+                <PieChartIcon className="mr-2 h-5 w-5 text-primary" /> Expense Breakdown
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-[350px]">
+            {expensesByCategory.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={expensesByCategory}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name }) => {
+                      const RADIAN = Math.PI / 180;
+                      const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                      const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                      const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                      return (
+                        <text x={x} y={y} fill="white" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="10px">
+                          {`${(percent * 100).toFixed(0)}%`}
+                        </text>
+                      );
+                    }}
+                  >
+                    {expensesByCategory.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number, name: string) => [formatCurrency(value), name]}/>
+                  <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}/>
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-muted-foreground text-center pt-10">No expense data for chart.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-        <Card className="shadow-lg md:col-span-2">
+      <Card className="shadow-lg md:col-span-3"> {/* Changed to md:col-span-3 for full width */}
            <CardHeader>
             <CardTitle className="font-headline flex items-center">
               <CalendarClock className="mr-2 h-5 w-5 text-primary" /> Upcoming Appointments
@@ -153,8 +220,6 @@ export default function DashboardPage() {
                         {format(app.date, "EEEE, MMM d, yyyy")} at {app.time}
                       </p>
                     </div>
-                     {/* Placeholder for assigned staff, if that feature is added */}
-                     {/* <Users className="h-5 w-5 text-muted-foreground" />  */}
                   </li>
                 ))}
               </ul>
@@ -163,7 +228,6 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
-      </div>
     </div>
   );
 }

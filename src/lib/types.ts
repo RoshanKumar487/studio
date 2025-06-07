@@ -36,15 +36,10 @@ export interface Employee {
   id: string; // This will be the Firestore document ID
   name: string;
   email?: string;
+  jobTitle?: string;
+  startDate?: Date | null; // Can be null if not set
+  employmentType?: 'Full-time' | 'Part-time' | 'Contract';
   documents: EmployeeDocument[]; // Documents will be an array within the employee object in Firestore
-}
-
-export interface TimesheetEntry {
-  id: string;
-  employeeId: string;
-  date: Date;
-  hours: number;
-  taskDescription: string;
 }
 
 export interface InvoiceLineItem {
