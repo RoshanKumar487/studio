@@ -1,12 +1,15 @@
 
 "use client";
 
-import React, { useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useMemo, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAppData } from "@/context/app-data-context";
-import { DollarSign, TrendingUp, TrendingDown, Users, Building, Loader2, PieChartIcon } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Users, Building, Loader2, PieChartIcon, Banknote, Landmark } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { format, subDays, eachDayOfInterval } from 'date-fns';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const PIE_CHART_COLORS = [
   'hsl(var(--chart-1))', 
@@ -21,6 +24,7 @@ const PIE_CHART_COLORS = [
 
 export default function DashboardPage() {
   const { totalRevenue, totalExpenses, netProfit, revenueEntries, expenseEntries, employees, invoices, loadingEmployees } = useAppData();
+  const [isBankConnectDialogOpen, setIsBankConnectDialogOpen] = useState(false);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -123,7 +127,47 @@ export default function DashboardPage() {
             <p className="text-xs text-muted-foreground">Based on invoices</p>
           </CardContent>
         </Card>
+        <Card className="shadow-lg">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Link Bank Account</CardTitle>
+            <Banknote className="h-5 w-5 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full mt-2" onClick={() => setIsBankConnectDialogOpen(true)}>
+              <Landmark className="mr-2 h-4 w-4" /> Connect Bank
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2">Automate transaction imports (placeholder).</p>
+          </CardContent>
+        </Card>
       </div>
+
+      <Dialog open={isBankConnectDialogOpen} onOpenChange={setIsBankConnectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Landmark className="mr-2 h-5 w-5 text-primary"/> Bank Integration (Feature Placeholder)
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              This feature would allow you to securely connect your bank accounts to automatically import transactions and expenses.
+            </DialogDescription>
+          </DialogHeader>
+          <Alert variant="default" className="mt-4 bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-700">
+            <AlertTitle className="text-blue-700 dark:text-blue-300">How it would work:</AlertTitle>
+            <AlertDescription className="text-xs text-blue-600 dark:text-blue-400">
+              You would typically be redirected to a secure portal (e.g., provided by Plaid or Stripe Financial Connections) to authenticate with your bank. 
+              Once linked, FlowHQ could periodically fetch new transactions.
+              <br /><br />
+              <strong>For this prototype, actual bank integration is not implemented.</strong>
+            </AlertDescription>
+          </Alert>
+          <DialogFooter className="mt-2">
+            <DialogClose asChild>
+              <Button type="button">Understood</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="shadow-lg md:col-span-2">
@@ -198,3 +242,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
