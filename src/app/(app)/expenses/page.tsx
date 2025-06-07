@@ -15,8 +15,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDes
 import { DatePicker } from '@/components/shared/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ArrowUpDown, PlusCircle, Paperclip, Camera, Loader2, VideoOff, XCircle, FileWarning, Download, Image as ImageIcon } from 'lucide-react';
+import { ArrowUpDown, PlusCircle, Paperclip, Camera, Loader2, VideoOff, XCircle, FileWarning, Download, Image as ImageIcon, Eye } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format } from 'date-fns';
 import NextImage from 'next/image';
@@ -51,7 +52,8 @@ export default function ExpensesPage() {
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isViewAttachmentDialogOpen, setIsViewAttachmentDialogOpen] = useState(false);
 
 
   const form = useForm<ExpenseFormData>({
@@ -327,9 +329,16 @@ export default function ExpensesPage() {
                             {selectedFile.name} ({formatFileSize(selectedFile.size)})
                           </span>
                         </FormDescription>
-                        <Button type="button" variant="ghost" size="sm" onClick={handleDownloadSelectedFile} className="text-xs h-auto py-1 px-2 shrink-0">
-                          <Download className="mr-1 h-3.5 w-3.5" /> Download
-                        </Button>
+                        <div className="flex gap-1 shrink-0">
+                            {imagePreviewUrl && (
+                                <Button type="button" variant="ghost" size="sm" onClick={() => setIsViewAttachmentDialogOpen(true)} className="text-xs h-auto py-1 px-2">
+                                    <Eye className="mr-1 h-3.5 w-3.5" /> View
+                                </Button>
+                            )}
+                            <Button type="button" variant="ghost" size="sm" onClick={handleDownloadSelectedFile} className="text-xs h-auto py-1 px-2">
+                                <Download className="mr-1 h-3.5 w-3.5" /> Download
+                            </Button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -445,6 +454,41 @@ export default function ExpensesPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={isViewAttachmentDialogOpen} onOpenChange={setIsViewAttachmentDialogOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Attachment Preview: {selectedFile?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            {imagePreviewUrl && (
+              <NextImage 
+                src={imagePreviewUrl} 
+                alt={selectedFile?.name || "Attachment preview"} 
+                width={800} 
+                height={600} 
+                className="rounded-md object-contain max-h-[70vh] w-auto mx-auto" 
+              />
+            )}
+            {!imagePreviewUrl && selectedFile && (
+                <Alert>
+                    <FileWarning className="h-4 w-4" />
+                    <AlertTitle>Cannot Preview File</AlertTitle>
+                    <AlertDescription>
+                        Preview is only available for image files. File type: {selectedFile.type}.
+                        You can download it to view.
+                    </AlertDescription>
+                </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Close</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
