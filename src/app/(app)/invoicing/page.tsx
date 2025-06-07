@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useForm, useFieldArray, type SubmitHandler, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,14 +16,15 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { DatePicker } from '@/components/shared/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSpreadsheet, PlusCircle, Trash2, Eye, Check, ChevronsUpDown, Mail } from 'lucide-react';
+import { FileSpreadsheet, PlusCircle, Trash2, Eye, Check, ChevronsUpDown, Mail, FilterX, Search } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { format, addDays } from 'date-fns';
+import { format, addDays, startOfDay, endOfDay } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { SendInvoiceEmailDialog } from '@/components/shared/send-invoice-email-dialog';
+import { Label } from '@/components/ui/label';
 
 const lineItemSchema = z.object({
   id: z.string().optional(), 
@@ -50,6 +51,8 @@ const invoiceSchema = z.object({
 
 type InvoiceFormData = z.infer<typeof invoiceSchema>;
 
+const invoiceStatuses = ['Draft', 'Sent', 'Paid', 'Overdue'] as const;
+
 export default function InvoicingPage() {
   const { employees, invoices, addInvoice, getNextInvoiceNumber } = useAppData();
   const { toast } = useToast();
@@ -58,6 +61,12 @@ export default function InvoicingPage() {
 
   const [serviceProviderComboboxOpen, setServiceProviderComboboxOpen] = useState(false);
   const [serviceProviderSearchText, setServiceProviderSearchText] = useState("");
+
+  // Filters State
+  const [filterStartDate, setFilterStartDate] = useState<Date | undefined>(undefined);
+  const [filterEndDate, setFilterEndDate] = useState<Date | undefined>(undefined);
+  const [filterStatus, setFilterStatus] = useState<string>("All");
+  const [filterCustomerName, setFilterCustomerName] = useState<string>("");
 
   const form = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
@@ -172,6 +181,35 @@ export default function InvoicingPage() {
     });
   };
 
+  const resetFilters = () => {
+    setFilterStartDate(undefined);
+    setFilterEndDate(undefined);
+    setFilterStatus("All");
+    setFilterCustomerName("");
+  };
+
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter(invoice => {
+      let isMatch = true;
+      const invoiceDateOnly = startOfDay(invoice.invoiceDate);
+
+      if (filterStartDate) {
+        if (invoiceDateOnly < startOfDay(filterStartDate)) isMatch = false;
+      }
+      if (filterEndDate) {
+        if (invoiceDateOnly > endOfDay(filterEndDate)) isMatch = false;
+      }
+      if (filterStatus !== "All" && invoice.status !== filterStatus) {
+        isMatch = false;
+      }
+      if (filterCustomerName && !invoice.customerName.toLowerCase().includes(filterCustomerName.toLowerCase().trim())) {
+        isMatch = false;
+      }
+      return isMatch;
+    }).sort((a, b) => new Date(b.invoiceDate).getTime() - new Date(a.invoiceDate).getTime());
+  }, [invoices, filterStartDate, filterEndDate, filterStatus, filterCustomerName]);
+
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-between items-center">
@@ -199,6 +237,55 @@ export default function InvoicingPage() {
           <PlusCircle className="mr-2 h-5 w-5" /> Create New Invoice
         </Button>
       </div>
+
+      <Card className="shadow-lg">
+        <CardHeader>
+          <CardTitle className="font-headline flex items-center gap-2">
+            <Search className="h-5 w-5 text-primary"/>
+            Filter Invoices
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="filter-start-date">Start Date</Label>
+              <DatePicker date={filterStartDate} setDate={setFilterStartDate} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="filter-end-date">End Date</Label>
+              <DatePicker date={filterEndDate} setDate={setFilterEndDate} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="filter-status">Status</Label>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger id="filter-status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Statuses</SelectItem>
+                  {invoiceStatuses.map(status => (
+                    <SelectItem key={status} value={status}>{status}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1 md:col-span-2 lg:col-span-1">
+              <Label htmlFor="filter-customer">Customer Name</Label>
+              <Input 
+                id="filter-customer"
+                type="text"
+                placeholder="Search by customer name..."
+                value={filterCustomerName}
+                onChange={(e) => setFilterCustomerName(e.target.value)}
+              />
+            </div>
+          </div>
+          <Button onClick={resetFilters} variant="outline" size="sm">
+            <FilterX className="mr-2 h-4 w-4" /> Reset Filters
+          </Button>
+        </CardContent>
+      </Card>
+
 
       {isInvoiceFormOpen && (
         <Card className="shadow-lg">
@@ -384,7 +471,7 @@ export default function InvoicingPage() {
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                             <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                             <SelectContent>
-                            {['Draft', 'Sent', 'Paid', 'Overdue'].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                            {invoiceStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         <FormMessage />
@@ -415,7 +502,7 @@ export default function InvoicingPage() {
           <CardTitle className="font-headline">Invoice History</CardTitle>
         </CardHeader>
         <CardContent>
-          {invoices.length > 0 ? (
+          {filteredInvoices.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -429,7 +516,7 @@ export default function InvoicingPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoices.map((invoice) => (
+                {filteredInvoices.map((invoice) => (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
                     <TableCell>{invoice.customerName}</TableCell>
@@ -459,7 +546,7 @@ export default function InvoicingPage() {
               </TableBody>
             </Table>
           ) : (
-            <p className="text-muted-foreground text-center py-4">No invoices created yet.</p>
+            <p className="text-muted-foreground text-center py-4">No invoices match your current filters, or no invoices created yet.</p>
           )}
         </CardContent>
       </Card>
