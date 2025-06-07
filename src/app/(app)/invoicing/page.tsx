@@ -16,9 +16,9 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { DatePicker } from '@/components/shared/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSpreadsheet, PlusCircle, Trash2, Eye, Check, ChevronsUpDown, Mail, FilterX, Search, Filter } from 'lucide-react';
+import { FileSpreadsheet, PlusCircle, Trash2, Eye, Check, ChevronsUpDown, Mail, FilterX, Search, Filter, Pencil } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { format, addDays, startOfDay, endOfDay } from 'date-fns';
+import { format, addDays, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -53,17 +53,32 @@ type InvoiceFormData = z.infer<typeof invoiceSchema>;
 
 const invoiceStatuses = ['Draft', 'Sent', 'Paid', 'Overdue'] as const;
 
+const defaultFormValues: InvoiceFormData = {
+    companyName: 'FlowHQ', 
+    companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321', 
+    customerName: '',
+    customerAddress: '',
+    invoiceDate: new Date(),
+    dueDate: addDays(new Date(), 30),
+    lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
+    taxRate: 0,
+    notes: '',
+    status: 'Draft',
+    employeeId: null, 
+    serviceProviderName: '',
+};
+
 export default function InvoicingPage() {
-  const { employees, invoices, addInvoice, getNextInvoiceNumber } = useAppData();
+  const { employees, invoices, addInvoice, updateInvoice, getInvoiceById, getNextInvoiceNumber } = useAppData();
   const { toast } = useToast();
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [selectedInvoiceForEmail, setSelectedInvoiceForEmail] = useState<{ id: string; invoiceNumber: string; customerName: string; } | null>(null);
 
   const [serviceProviderComboboxOpen, setServiceProviderComboboxOpen] = useState(false);
   const [serviceProviderSearchText, setServiceProviderSearchText] = useState("");
 
-  // Filters State
-  const [isFilterOpen, setIsFilterOpen] = useState(false); // New state for filter visibility
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filterStartDate, setFilterStartDate] = useState<Date | undefined>(undefined);
   const [filterEndDate, setFilterEndDate] = useState<Date | undefined>(undefined);
   const [filterStatus, setFilterStatus] = useState<string>("All");
@@ -71,23 +86,10 @@ export default function InvoicingPage() {
 
   const form = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
-    defaultValues: {
-      companyName: 'FlowHQ', 
-      companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321', 
-      customerName: '',
-      customerAddress: '',
-      invoiceDate: new Date(),
-      dueDate: addDays(new Date(), 30),
-      lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
-      taxRate: 0,
-      notes: '',
-      status: 'Draft',
-      employeeId: null, 
-      serviceProviderName: '',
-    },
+    defaultValues: defaultFormValues,
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, replace } = useFieldArray({
     control: form.control,
     name: "lineItems",
   });
@@ -105,6 +107,38 @@ export default function InvoicingPage() {
     }
   }, [watchedEmployeeId, watchedServiceProviderName, employees]);
 
+  const handleOpenEditForm = (invoiceId: string) => {
+    const invoiceToEdit = getInvoiceById(invoiceId);
+    if (invoiceToEdit) {
+      setEditingInvoiceId(invoiceId);
+      form.reset({
+        ...invoiceToEdit,
+        invoiceDate: invoiceToEdit.invoiceDate ? new Date(invoiceToEdit.invoiceDate) : new Date(),
+        dueDate: invoiceToEdit.dueDate ? new Date(invoiceToEdit.dueDate) : addDays(new Date(), 30),
+        lineItems: invoiceToEdit.lineItems.map(li => ({...li})), // Ensure new array of objects
+        employeeId: invoiceToEdit.employeeId || null,
+        serviceProviderName: invoiceToEdit.serviceProviderName || '',
+      });
+      // Set combobox text
+      if (invoiceToEdit.employeeId) {
+          const emp = employees.find(e => e.id === invoiceToEdit.employeeId);
+          setServiceProviderSearchText(emp?.name || invoiceToEdit.serviceProviderName || "");
+      } else {
+          setServiceProviderSearchText(invoiceToEdit.serviceProviderName || "");
+      }
+      setIsInvoiceFormOpen(true);
+    } else {
+      toast({ title: "Error", description: "Could not find invoice to edit.", variant: "destructive" });
+    }
+  };
+  
+  const resetFormAndState = () => {
+    form.reset(defaultFormValues);
+    setServiceProviderSearchText(""); 
+    setEditingInvoiceId(null);
+    setIsInvoiceFormOpen(false);
+  };
+
   const onSubmit: SubmitHandler<InvoiceFormData> = async (data) => {
     const processedData = {
       ...data,
@@ -112,35 +146,30 @@ export default function InvoicingPage() {
       serviceProviderName: data.employeeId ? undefined : (data.serviceProviderName || undefined),
       lineItems: data.lineItems.map(item => ({
         ...item,
+        id: item.id || uuidv4(), // Ensure ID for new line items
         total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
       })),
     };
-    const newInvoice = await addInvoice(processedData);
-    if (newInvoice) {
-        toast({
-        title: "Invoice Created",
-        description: `Invoice ${newInvoice.invoiceNumber} for ${data.customerName} has been created.`,
-        });
-        form.reset({
-        companyName: 'FlowHQ',
-        companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321',
-        customerName: '',
-        customerAddress: '',
-        invoiceDate: new Date(),
-        dueDate: addDays(new Date(), 30),
-        lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
-        taxRate: 0,
-        notes: '',
-        status: 'Draft',
-        employeeId: null,
-        serviceProviderName: '',
-        });
-        setServiceProviderSearchText(""); 
-        setIsInvoiceFormOpen(false);
+
+    let result: Invoice | null = null;
+    if (editingInvoiceId) {
+      result = await updateInvoice(editingInvoiceId, processedData);
+      if (result) {
+        toast({ title: "Invoice Updated", description: `Invoice ${result.invoiceNumber} has been updated.`});
+      }
+    } else {
+      result = await addInvoice(processedData);
+       if (result) {
+        toast({ title: "Invoice Created", description: `Invoice ${result.invoiceNumber} for ${data.customerName} has been created.`});
+      }
+    }
+
+    if (result) {
+      resetFormAndState();
     } else {
         toast({
             title: "Error",
-            description: "Failed to create invoice.",
+            description: `Failed to ${editingInvoiceId ? 'update' : 'create'} invoice.`,
             variant: "destructive"
         });
     }
@@ -218,21 +247,7 @@ export default function InvoicingPage() {
           <FileSpreadsheet className="mr-3 h-8 w-8 text-primary" /> Invoicing
         </h1>
         <Button onClick={() => {
-          form.reset({
-            companyName: 'FlowHQ', 
-            companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321', 
-            customerName: '',
-            customerAddress: '',
-            invoiceDate: new Date(),
-            dueDate: addDays(new Date(), 30),
-            lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
-            taxRate: 0,
-            notes: '',
-            status: 'Draft',
-            employeeId: null, 
-            serviceProviderName: '',
-          });
-          setServiceProviderSearchText(""); 
+          resetFormAndState(); // Ensures form is clean for new entry
           setIsInvoiceFormOpen(true);
         }}>
           <PlusCircle className="mr-2 h-5 w-5" /> Create New Invoice
@@ -296,7 +311,11 @@ export default function InvoicingPage() {
       {isInvoiceFormOpen && (
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle className="font-headline">New Invoice ({getNextInvoiceNumber()})</CardTitle>
+            <CardTitle className="font-headline">
+                {editingInvoiceId 
+                    ? `Edit Invoice ${getInvoiceById(editingInvoiceId)?.invoiceNumber || ''}` 
+                    : `New Invoice (${getNextInvoiceNumber()})`}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <Form {...form}>
@@ -474,7 +493,7 @@ export default function InvoicingPage() {
                     <FormField control={form.control} name="status" render={({ field }) => (
                         <FormItem>
                         <FormLabel>Status</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
                             <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                             <SelectContent>
                             {invoiceStatuses.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
@@ -494,8 +513,8 @@ export default function InvoicingPage() {
                 )} />
 
                 <div className="flex justify-end gap-2 pt-4">
-                    <Button type="button" variant="outline" onClick={() => { setIsInvoiceFormOpen(false); form.reset(); setServiceProviderSearchText(""); }}>Cancel</Button>
-                    <Button type="submit">Create Invoice</Button>
+                    <Button type="button" variant="outline" onClick={resetFormAndState}>Cancel</Button>
+                    <Button type="submit">{editingInvoiceId ? 'Update Invoice' : 'Create Invoice'}</Button>
                 </div>
               </form>
             </Form>
@@ -542,6 +561,9 @@ export default function InvoicingPage() {
                     <TableCell className="text-right space-x-1">
                       <Button asChild variant="outline" size="sm">
                         <Link href={`/invoicing/${invoice.id}`}><Eye className="mr-2 h-4 w-4" /> View</Link>
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleOpenEditForm(invoice.id)}>
+                        <Pencil className="mr-2 h-4 w-4" /> Edit
                       </Button>
                        <Button variant="outline" size="sm" onClick={() => handleOpenEmailDialog(invoice)}>
                         <Mail className="mr-2 h-4 w-4" /> Email

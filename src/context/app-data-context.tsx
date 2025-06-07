@@ -21,6 +21,7 @@ interface AppDataContextType {
   getEmployeeById: (employeeId: string) => Promise<Employee | undefined>; 
   
   addInvoice: (invoiceData: Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>) => Promise<Invoice | null>;
+  updateInvoice: (invoiceId: string, invoiceData: Partial<Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>>) => Promise<Invoice | null>;
   updateInvoiceStatus: (invoiceId: string, status: Invoice['status']) => Promise<void>;
   getInvoiceById: (invoiceId: string) => Invoice | undefined; // Stays local after fetch
   getNextInvoiceNumber: () => string; // Stays client-side for now
@@ -328,7 +329,47 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoadingInvoices(false);
     }
-  }, [toast, getNextInvoiceNumber]); 
+  }, [toast, getNextInvoiceNumber, invoices]); // Added invoices to dependency array for getNextInvoiceNumber
+
+  const updateInvoice = useCallback(async (invoiceId: string, invoiceData: Partial<Omit<Invoice, 'id' | 'invoiceNumber' | 'subTotal' | 'taxAmount' | 'grandTotal'>>): Promise<Invoice | null> => {
+    setLoadingInvoices(true);
+    const payload = {
+      ...invoiceData,
+      invoiceDate: invoiceData.invoiceDate ? (typeof invoiceData.invoiceDate === 'string' ? invoiceData.invoiceDate : (invoiceData.invoiceDate as Date).toISOString()) : undefined,
+      dueDate: invoiceData.dueDate ? (typeof invoiceData.dueDate === 'string' ? invoiceData.dueDate : (invoiceData.dueDate as Date).toISOString()) : undefined,
+    };
+    try {
+      const response = await fetch(`/api/invoices/${invoiceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({message: `Failed to update invoice (Status: ${response.status})`}));
+        throw new Error(errorData.message || `Failed to update invoice (Status: ${response.status})`);
+      }
+      const updatedInvoice: Invoice = await response.json();
+      const processedInvoice = {
+        ...updatedInvoice,
+        invoiceDate: new Date(updatedInvoice.invoiceDate),
+        dueDate: new Date(updatedInvoice.dueDate),
+      };
+      setInvoices(prevInvoices => 
+        prevInvoices.map(inv => 
+          inv.id === invoiceId 
+            ? processedInvoice
+            : inv
+        ).sort((a, b) => new Date(b.invoiceDate).getTime() - new Date(a.invoiceDate).getTime())
+      );
+      return processedInvoice;
+    } catch (error: any) {
+      console.error("Error updating invoice:", error);
+      toast({ title: "Error Updating Invoice", description: error.message || "Could not update invoice.", variant: "destructive"});
+      return null;
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }, [toast]);
 
   const updateInvoiceStatus = useCallback(async (invoiceId: string, status: Invoice['status']) => {
     setLoadingInvoices(true);
@@ -336,7 +377,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`/api/invoices/${invoiceId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status }), // Only send status for status-specific update
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({message: `Failed to update invoice status (Status: ${response.status})`}));
@@ -352,7 +393,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       );
     } catch (error: any) {
         console.error("Error updating invoice status:", error);
-        toast({ title: "Error Updating Invoice", description: error.message || "Could not update invoice status.", variant: "destructive"});
+        toast({ title: "Error Updating Invoice Status", description: error.message || "Could not update invoice status.", variant: "destructive"});
     } finally {
       setLoadingInvoices(false);
     }
@@ -380,6 +421,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       deleteEmployeeDocument, 
       getEmployeeById, 
       addInvoice,
+      updateInvoice,
       updateInvoiceStatus,
       getInvoiceById,
       getNextInvoiceNumber,
