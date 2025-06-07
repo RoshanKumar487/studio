@@ -43,16 +43,15 @@ const invoiceSchema = z.object({
   notes: z.string().optional(),
   status: z.enum(['Draft', 'Sent', 'Paid', 'Overdue']).default('Draft'),
 }).refine(data => {
-    // If employeeId is selected, serviceProviderName is not required
-    // If employeeId is NOT selected, serviceProviderName can be provided
     return !!data.employeeId || !!data.serviceProviderName || (!data.employeeId && !data.serviceProviderName);
 }, {
     message: "Either select an employee or enter a service provider name if applicable.",
-    path: ["serviceProviderName"], // Or a more general path if needed
+    path: ["serviceProviderName"], 
 });
 
-
 type InvoiceFormData = z.infer<typeof invoiceSchema>;
+
+const NO_EMPLOYEE_SELECTED_VALUE = "__NO_EMPLOYEE_SELECTED__";
 
 export default function InvoicingPage() {
   const { employees, invoices, addInvoice, getNextInvoiceNumber } = useAppData();
@@ -87,15 +86,15 @@ export default function InvoicingPage() {
 
   useEffect(() => {
     if (watchedEmployeeId) {
-      form.setValue("serviceProviderName", ""); // Clear manual name if employee is selected
+      form.setValue("serviceProviderName", ""); 
     }
   }, [watchedEmployeeId, form]);
 
   const onSubmit: SubmitHandler<InvoiceFormData> = (data) => {
     const processedData = {
       ...data,
-      employeeId: data.employeeId || undefined, // Ensure undefined if null/empty
-      serviceProviderName: data.employeeId ? undefined : data.serviceProviderName, // Only use serviceProviderName if no employeeId
+      employeeId: data.employeeId || undefined, 
+      serviceProviderName: data.employeeId ? undefined : data.serviceProviderName, 
       lineItems: data.lineItems.map(item => ({
         ...item,
         total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
@@ -182,12 +181,14 @@ export default function InvoicingPage() {
                   <FormItem>
                     <FormLabel>Link to Service Employee (Optional)</FormLabel>
                     <Select 
-                      onValueChange={(value) => field.onChange(value === "" ? null : value)} 
-                      value={field.value || ""}
+                      onValueChange={(value) => {
+                        field.onChange(value === NO_EMPLOYEE_SELECTED_VALUE ? null : value);
+                      }} 
+                      value={field.value === null ? NO_EMPLOYEE_SELECTED_VALUE : field.value}
                     >
-                      <FormControl><SelectTrigger><SelectValue placeholder="Select an employee or leave blank for manual name" /></SelectTrigger></FormControl>
+                      <FormControl><SelectTrigger><SelectValue placeholder="Select an employee or enter manually" /></SelectTrigger></FormControl>
                       <SelectContent>
-                        <SelectItem value="">-- None / Enter Manually Below --</SelectItem>
+                        <SelectItem value={NO_EMPLOYEE_SELECTED_VALUE}>-- None / Enter Manually Below --</SelectItem>
                         {employees.map(emp => (<SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.jobTitle || 'N/A'})</SelectItem>))}
                       </SelectContent>
                     </Select>
@@ -202,11 +203,11 @@ export default function InvoicingPage() {
                             placeholder="e.g., Freelancer Name, External Consultant" 
                             {...field} 
                             disabled={!!watchedEmployeeId} 
-                            value={watchedEmployeeId ? "" : field.value}
+                            value={watchedEmployeeId ? "" : (field.value || "")}
                         />
                     </FormControl>
                     {!!watchedEmployeeId && <FormMessage>Employee selected, manual name disabled.</FormMessage>}
-                    {!watchedEmployeeId && (!field.value) && <FormMessage>Required if no employee is selected and service is by a person.</FormMessage>}
+                    {!watchedEmployeeId && (!field.value && !form.getValues("employeeId")) && <FormMessage>Required if no employee is selected and service is by a person.</FormMessage>}
                   </FormItem>
                 )} />
 
