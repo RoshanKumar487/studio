@@ -23,7 +23,7 @@ const AddEmployeeByTextOutputSchema = z.object({
   success: z.boolean().describe('Whether the parsing was successful and all required fields are present.'),
   message: z.string().describe('A message indicating success or failure, or asking for clarification.'),
   name: z.string().optional().describe('Extracted full name of the employee.'),
-  email: z.string().email().optional().describe('Extracted email address of the employee.'),
+  email: z.string().optional().describe('Extracted email address of the employee. Should be a valid email format if present.'),
   jobTitle: z.string().optional().describe('Extracted job title of the employee.'),
   startDate: z.string().optional().describe('Extracted start date in YYYY-MM-DD format.'),
   employmentType: z.enum(employmentTypes).optional().describe('Extracted employment type.'),
@@ -94,3 +94,4 @@ const addEmployeeByTextFlow = ai.defineFlow(
     return output;
   }
 );
+
