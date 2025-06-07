@@ -10,12 +10,13 @@ import type { ExpenseEntry } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { DatePicker } from '@/components/shared/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogTrigger } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ArrowUpDown, PlusCircle, Paperclip, Camera, Loader2, VideoOff, XCircle, FileWarning, Download, Image as ImageIcon, Eye, FileText, InfoIcon, Printer } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
@@ -59,6 +60,9 @@ export default function ExpensesPage() {
   const [historyAttachmentToView, setHistoryAttachmentToView] = useState<HistoryAttachmentInfo | null>(null);
   const [isHistoryAttachmentDialogValidOpen, setIsHistoryAttachmentDialogValidOpen] = useState(false);
 
+  const [isAddExpenseDialogOpen, setIsAddExpenseDialogOpen] = useState(false);
+  const [isReportPopoverOpen, setIsReportPopoverOpen] = useState(false);
+
   const [reportStartDate, setReportStartDate] = useState<Date | undefined>(undefined);
   const [reportEndDate, setReportEndDate] = useState<Date | undefined>(undefined);
   const [expensesForReport, setExpensesForReport] = useState<ExpenseEntry[] | null>(null);
@@ -83,7 +87,6 @@ export default function ExpensesPage() {
     };
   }, [imagePreviewUrl]);
 
-  // Effect to trigger print when report data is ready
   useEffect(() => {
     if (expensesForReport) { 
       if (expensesForReport.length > 0) {
@@ -91,12 +94,14 @@ export default function ExpensesPage() {
           window.print();
           setExpensesForReport(null); 
           setReportPeriodString("");
+          setIsReportPopoverOpen(false); // Close popover after print
         }, 250); 
         return () => clearTimeout(timer);
       } else {
          const timer = setTimeout(() => {
             setExpensesForReport(null); 
             setReportPeriodString("");
+            setIsReportPopoverOpen(false); // Close popover even if no data
          }, 250);
          return () => clearTimeout(timer);
       }
@@ -125,10 +130,8 @@ export default function ExpensesPage() {
       setExpensesForReport([]); 
       return;
     }
-
     setExpensesForReport(filtered);
   };
-
 
   const stopCameraStream = () => {
     if (videoRef.current && videoRef.current.srcObject) {
@@ -210,6 +213,15 @@ export default function ExpensesPage() {
     }
   };
 
+  const resetExpenseForm = () => {
+    form.reset({ date: new Date(), amount: 0, category: '', description: '', submittedBy: '' });
+    setSelectedFile(null);
+    setImagePreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = ""; 
+    setIsCameraMode(false);
+    stopCameraStream();
+  };
+
   const onSubmit: SubmitHandler<ExpenseFormData> = (data) => {
     const expensePayload: Partial<ExpenseEntry> = { ...data };
     if (selectedFile) {
@@ -223,12 +235,8 @@ export default function ExpensesPage() {
       title: "Expense Added",
       description: `Successfully added expense for ${data.category}.`,
     });
-    form.reset({ date: new Date(), amount: 0, category: '', description: '', submittedBy: '' });
-    setSelectedFile(null);
-    setImagePreviewUrl(null);
-    if (fileInputRef.current) fileInputRef.current.value = ""; 
-    setIsCameraMode(false);
-    stopCameraStream();
+    resetExpenseForm();
+    setIsAddExpenseDialogOpen(false);
   };
 
   const handleSort = (key: SortKey) => {
@@ -282,218 +290,232 @@ export default function ExpensesPage() {
     }
   };
 
-
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-3xl font-bold font-headline tracking-tight no-print-section">Expense Management</h1>
-      
-      <Card className="shadow-lg no-print-section">
-        <CardHeader>
-          <CardTitle className="font-headline flex items-center"><PlusCircle className="mr-2 h-6 w-6 text-primary" /> Add New Expense</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="date"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Date <span className="text-destructive">*</span></FormLabel>
-                      <DatePicker date={field.value} setDate={field.onChange} />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="amount"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Amount <span className="text-destructive">*</span></FormLabel>
-                      <FormControl>
-                        <Input type="number" step="0.01" placeholder="0.00" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              
-              <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Category <span className="text-destructive">*</span></FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {expenseCategories.map(cat => (
-                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="e.g., Monthly software subscription" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="submittedBy"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Submitted By (Optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Your Name" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormItem>
-                <FormLabel>Attach Receipt/Document (Optional)</FormLabel>
-                {!isCameraMode && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <FormControl className="flex-grow min-w-0">
-                        <Input 
-                          type="file" 
-                          ref={fileInputRef}
-                          onChange={handleFileChange} 
-                          className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+      <div className="flex justify-between items-center no-print-section">
+        <h1 className="text-3xl font-bold font-headline tracking-tight">Expense Management</h1>
+        <div className="flex gap-2">
+            <Dialog open={isAddExpenseDialogOpen} onOpenChange={(isOpen) => {
+                setIsAddExpenseDialogOpen(isOpen);
+                if (!isOpen) resetExpenseForm(); // Reset form if dialog is closed
+            }}>
+            <DialogTrigger asChild>
+                <Button><PlusCircle className="mr-2 h-5 w-5" /> Add New Expense</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader><DialogTitle className="font-headline">Add New Expense</DialogTitle></DialogHeader>
+                <div className="py-2 max-h-[70vh] overflow-y-auto pr-2">
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <FormField
+                        control={form.control}
+                        name="date"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                            <FormLabel>Date <span className="text-destructive">*</span></FormLabel>
+                            <DatePicker date={field.value} setDate={field.onChange} />
+                            <FormMessage />
+                            </FormItem>
+                        )}
                         />
-                      </FormControl>
-                      <Button type="button" variant="outline" onClick={startCamera} className="shrink-0" size="default">
-                        <Camera className="mr-2 h-4 w-4" /> Capture
-                      </Button>
+                        <FormField
+                        control={form.control}
+                        name="amount"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-col">
+                            <FormLabel>Amount <span className="text-destructive">*</span></FormLabel>
+                            <FormControl>
+                                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
                     </div>
-                    {selectedFile && (
-                      <div className="flex items-center justify-between gap-2 rounded-md border p-2 bg-muted/50">
-                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
-                          <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="truncate" title={selectedFile.name}>
-                            {selectedFile.name} ({formatFileSize(selectedFile.size)})
-                          </span>
-                        </p>
-                        <div className="flex gap-1 shrink-0">
-                            {imagePreviewUrl && (
-                                <Button type="button" variant="ghost" size="sm" onClick={() => setIsViewAttachmentDialogOpen(true)} className="text-xs h-auto py-1 px-2">
-                                    <Eye className="mr-1 h-3.5 w-3.5" /> View
-                                </Button>
+                    
+                    <FormField
+                        control={form.control}
+                        name="category"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Category <span className="text-destructive">*</span></FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                                <SelectTrigger>
+                                <SelectValue placeholder="Select a category" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {expenseCategories.map(cat => (
+                                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                ))}
+                            </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="description"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Description</FormLabel>
+                            <FormControl>
+                            <Textarea placeholder="e.g., Monthly software subscription" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="submittedBy"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Submitted By (Optional)</FormLabel>
+                            <FormControl>
+                            <Input placeholder="e.g., Your Name" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+
+                    <FormItem>
+                        <FormLabel>Attach Receipt/Document (Optional)</FormLabel>
+                        {!isCameraMode && (
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                            <FormControl className="flex-grow min-w-0">
+                                <Input 
+                                type="file" 
+                                ref={fileInputRef}
+                                onChange={handleFileChange} 
+                                className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                                />
+                            </FormControl>
+                            <Button type="button" variant="outline" onClick={startCamera} className="shrink-0" size="default">
+                                <Camera className="mr-2 h-4 w-4" /> Capture
+                            </Button>
+                            </div>
+                            {selectedFile && (
+                            <div className="flex items-center justify-between gap-2 rounded-md border p-2 bg-muted/50">
+                                <p className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
+                                <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <span className="truncate" title={selectedFile.name}>
+                                    {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                                </span>
+                                </p>
+                                <div className="flex gap-1 shrink-0">
+                                    {imagePreviewUrl && (
+                                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsViewAttachmentDialogOpen(true)} className="text-xs h-auto py-1 px-2">
+                                            <Eye className="mr-1 h-3.5 w-3.5" /> View
+                                        </Button>
+                                    )}
+                                    <Button type="button" variant="ghost" size="sm" onClick={handleDownloadSelectedFile} className="text-xs h-auto py-1 px-2">
+                                        <Download className="mr-1 h-3.5 w-3.5" /> Download
+                                    </Button>
+                                </div>
+                            </div>
                             )}
-                            <Button type="button" variant="ghost" size="sm" onClick={handleDownloadSelectedFile} className="text-xs h-auto py-1 px-2">
-                                <Download className="mr-1 h-3.5 w-3.5" /> Download
+                        </div>
+                        )}
+                    </FormItem>
+                    
+                    {isCameraMode && (
+                        <Card className="p-4 space-y-3 border-dashed">
+                        <CardTitle className="text-base font-semibold">Camera Capture</CardTitle>
+                        <div className="relative aspect-video bg-muted rounded-md overflow-hidden">
+                            <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
+                            {hasCameraPermission === false && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white p-4">
+                                    <VideoOff className="h-10 w-10 mb-2"/>
+                                    <p className="text-center font-semibold">Camera Access Denied</p>
+                                    <p className="text-xs text-center">Please enable permissions.</p>
+                                </div>
+                            )}
+                            {hasCameraPermission === null && (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white p-4">
+                                    <Loader2 className="h-10 w-10 mb-2 animate-spin"/>
+                                    <p>Accessing camera...</p>
+                                </div>
+                            )}
+                        </div>
+                        <canvas ref={canvasRef} className="hidden"></canvas>
+                        <div className="flex gap-2">
+                            <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission} size="sm">
+                            <Camera className="mr-2 h-4 w-4" /> Capture Photo
+                            </Button>
+                            <Button type="button" variant="outline" onClick={() => { setIsCameraMode(false); stopCameraStream(); }} size="sm">
+                            <XCircle className="mr-2 h-4 w-4" /> Cancel Camera
                             </Button>
                         </div>
-                      </div>
+                        {selectedFile && isCameraMode && ( 
+                                <p className="flex items-center gap-1 pt-1 text-xs text-muted-foreground">
+                                    <Paperclip className="h-3 w-3 text-muted-foreground" /> Captured: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                                </p>
+                            )}
+                        </Card>
                     )}
-                  </div>
-                )}
-              </FormItem>
-              
-              {isCameraMode && (
-                <Card className="p-4 space-y-3 border-dashed">
-                  <CardTitle className="text-base font-semibold">Camera Capture</CardTitle>
-                  <div className="relative aspect-video bg-muted rounded-md overflow-hidden">
-                    <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
-                    {hasCameraPermission === false && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white p-4">
-                            <VideoOff className="h-10 w-10 mb-2"/>
-                            <p className="text-center font-semibold">Camera Access Denied</p>
-                            <p className="text-xs text-center">Please enable permissions.</p>
+
+                    {imagePreviewUrl && selectedFile && selectedFile.type.startsWith('image/') && !isCameraMode && (
+                        <div className="my-2 p-2 border rounded-md max-w-xs">
+                        <FormLabel className="text-xs">Preview:</FormLabel>
+                        <NextImage src={imagePreviewUrl} alt="Selected image preview" width={150} height={150} className="mt-1 rounded-md object-contain max-h-36 w-auto" />
                         </div>
                     )}
-                     {hasCameraPermission === null && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white p-4">
-                            <Loader2 className="h-10 w-10 mb-2 animate-spin"/>
-                            <p>Accessing camera...</p>
+                    {selectedFile && !selectedFile.type.startsWith('image/') && !imagePreviewUrl && !isCameraMode && (
+                        <div className="my-2 p-2 border rounded-md bg-muted/50 text-xs">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                                <FileWarning className="h-4 w-4 text-amber-500" />
+                                <span>No preview for {selectedFile.type}.</span>
+                            </div>
                         </div>
                     )}
-                  </div>
-                  <canvas ref={canvasRef} className="hidden"></canvas>
-                  <div className="flex gap-2">
-                    <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission} size="sm">
-                      <Camera className="mr-2 h-4 w-4" /> Capture Photo
+
+                    <DialogFooter className="pt-4">
+                        <DialogClose asChild><Button type="button" variant="outline" onClick={resetExpenseForm}>Cancel</Button></DialogClose>
+                        <Button type="submit">Add Expense</Button>
+                    </DialogFooter>
+                    </form>
+                </Form>
+                </div>
+            </DialogContent>
+            </Dialog>
+
+            <Popover open={isReportPopoverOpen} onOpenChange={setIsReportPopoverOpen}>
+                <PopoverTrigger asChild>
+                    <Button variant="outline" size="icon" aria-label="Generate Report">
+                        <Printer className="h-5 w-5" />
                     </Button>
-                    <Button type="button" variant="outline" onClick={() => { setIsCameraMode(false); stopCameraStream(); }} size="sm">
-                      <XCircle className="mr-2 h-4 w-4" /> Cancel Camera
-                    </Button>
-                  </div>
-                   {selectedFile && isCameraMode && ( 
-                        <p className="flex items-center gap-1 pt-1 text-xs text-muted-foreground">
-                            <Paperclip className="h-3 w-3 text-muted-foreground" /> Captured: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                </PopoverTrigger>
+                <PopoverContent className="w-80 space-y-4">
+                    <div className="space-y-2">
+                        <h4 className="font-medium leading-none">Generate Expense Report</h4>
+                        <p className="text-sm text-muted-foreground">
+                            Select a date range to generate and print a PDF report.
                         </p>
-                    )}
-                </Card>
-              )}
-
-              {imagePreviewUrl && selectedFile && selectedFile.type.startsWith('image/') && !isCameraMode && (
-                <div className="my-2 p-2 border rounded-md max-w-xs">
-                  <FormLabel className="text-xs">Preview:</FormLabel>
-                  <NextImage src={imagePreviewUrl} alt="Selected image preview" width={150} height={150} className="mt-1 rounded-md object-contain max-h-36 w-auto" />
-                </div>
-              )}
-              {selectedFile && !selectedFile.type.startsWith('image/') && !imagePreviewUrl && !isCameraMode && (
-                 <div className="my-2 p-2 border rounded-md bg-muted/50 text-xs">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                        <FileWarning className="h-4 w-4 text-amber-500" />
-                        <span>No preview for {selectedFile.type}.</span>
                     </div>
-                </div>
-              )}
-
-              <Button type="submit" className="w-full md:w-auto">Add Expense</Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
-
-      <Card className="shadow-lg no-print-section">
-        <CardHeader>
-          <CardTitle className="font-headline flex items-center">
-            <Printer className="mr-2 h-6 w-6 text-primary" /> Generate Expense Report (PDF)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="report-start-date">Report Start Date</Label>
-              <DatePicker date={reportStartDate} setDate={setReportStartDate} />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="report-end-date">Report End Date</Label>
-              <DatePicker date={reportEndDate} setDate={setReportEndDate} />
-            </div>
-          </div>
-          <Button onClick={handleGenerateAndPrintReport} className="w-full md:w-auto">
-            <Printer className="mr-2 h-4 w-4" /> Generate & Print Report
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            This will prepare a printable view of expenses for the selected date range. Use your browser's print dialog to "Save as PDF".
-          </p>
-        </CardContent>
-      </Card>
-
+                    <div className="grid gap-2">
+                        <div className="grid grid-cols-1 items-center gap-4">
+                            <Label htmlFor="report-start-date" className="text-sm">Start Date</Label>
+                            <DatePicker date={reportStartDate} setDate={setReportStartDate} />
+                        </div>
+                        <div className="grid grid-cols-1 items-center gap-4">
+                            <Label htmlFor="report-end-date" className="text-sm">End Date</Label>
+                            <DatePicker date={reportEndDate} setDate={setReportEndDate} />
+                        </div>
+                    </div>
+                    <Button onClick={handleGenerateAndPrintReport} className="w-full">
+                        <Printer className="mr-2 h-4 w-4" /> Generate & Print Report
+                    </Button>
+                </PopoverContent>
+            </Popover>
+        </div>
+      </div>
+      
       <Card className="shadow-lg no-print-section">
         <CardHeader>
           <CardTitle className="font-headline">Expense History</CardTitle>
@@ -588,7 +610,7 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isHistoryAttachmentDialogValidOpen} onOpenChange={setIsHistoryAttachmentDialogValidOpen}>
+      <Dialog open={isHistoryAttachmentDialogValiOpen} onOpenChange={setIsHistoryAttachmentDialogValidOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Document Metadata: {historyAttachmentToView?.documentFileName}</DialogTitle>
@@ -707,9 +729,7 @@ export default function ExpensesPage() {
           }
         }
       `}</style>
-
     </div>
   );
 }
-
-      
+    
