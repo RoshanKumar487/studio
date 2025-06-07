@@ -142,8 +142,8 @@ export default function InvoiceDetailPage() {
         <CardHeader className="border-b print:border-b">
           <div className="flex justify-between items-start">
             <div>
-              <AppLogo />
-              <p className="text-lg font-semibold mt-2">{invoice.companyName}</p>
+              <AppLogo size="sm" />
+              <p className="text-lg font-semibold mt-1">{invoice.companyName}</p>
               {invoice.companyAddress && <p className="text-sm text-muted-foreground whitespace-pre-line">{invoice.companyAddress}</p>}
             </div>
             <div className="text-right">
@@ -220,9 +220,12 @@ export default function InvoiceDetailPage() {
           )}
 
         </CardContent>
-        <CardFooter className="print:hidden">
+        <CardFooter className="flex flex-col items-center pt-6 border-t print:border-t">
             <p className="text-xs text-muted-foreground">
                 Thank you for your business!
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+                Powered by BizView
             </p>
         </CardFooter>
       </Card>
@@ -234,6 +237,7 @@ export default function InvoiceDetailPage() {
           .print\:shadow-none { box-shadow: none !important; }
           .print\:border-none { border: none !important; }
           .print\:border-b { border-bottom-width: 1px !important; border-color: hsl(var(--border)) !important; }
+          .print\:border-t { border-top-width: 1px !important; border-color: hsl(var(--border)) !important; }
           .print\:hidden { display: none !important; }
           /* Ensure text colors are maintained for printing */
           .text-primary { color: hsl(var(--primary)) !important; }
@@ -244,4 +248,3 @@ export default function InvoiceDetailPage() {
     </div>
   );
 }
-
