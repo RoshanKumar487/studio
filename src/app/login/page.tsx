@@ -132,7 +132,7 @@ export default function LoginPage() {
                       <FormLabel>Enter OTP</FormLabel>
                       <FormControl>
                         <Input type="text" maxLength={6} placeholder="Enter 6-digit OTP" {...field} 
-                         inputMode="numeric" pattern="\d{6}"
+                         inputMode="numeric"
                         />
                       </FormControl>
                       <FormMessage />
