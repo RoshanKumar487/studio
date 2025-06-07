@@ -18,12 +18,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from '@/components/shared/date-picker';
-import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning, Loader2, Camera, XCircle, VideoOff } from 'lucide-react';
+import { Users, PlusCircle, FileText, Trash2, Eye, FileUp, InfoIcon, Download, Image as ImageIcon, FileWarning, Loader2, Camera, XCircle, VideoOff, Paperclip } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import NextImage from 'next/image'; // Renamed to avoid conflict with Lucide's Image
+import NextImage from 'next/image';
 
 
 const employmentTypes = ['Full-time', 'Part-time', 'Contract'] as const;
@@ -40,7 +40,7 @@ type EmployeeFormData = z.infer<typeof employeeSchema>;
 
 const documentSchema = z.object({
   name: z.string().min(1, "Document name is required.").max(100),
-  description: z.string().max(200).optional(),
+  description: z.string().max(200).optional().or(z.literal('')),
 });
 type DocumentFormData = z.infer<typeof documentSchema>;
 
@@ -57,6 +57,7 @@ export default function HrPage() {
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isCameraMode, setIsCameraMode] = useState(false);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
@@ -90,24 +91,39 @@ export default function HrPage() {
   };
 
   const startCamera = async () => {
-    stopCameraStream(); // Ensure any existing stream is stopped
+    stopCameraStream();
     setIsCameraMode(true);
-    setHasCameraPermission(null); // Reset permission status
+    setHasCameraPermission(null);
+    let stream: MediaStream | null = null;
+
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        console.log("Using environment (back) camera for HR document.");
+      } catch (envError) {
+        console.warn("Could not get environment camera for HR, attempting default/user camera:", envError);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          console.log("Using default/user (front) camera for HR document.");
+        } catch (defaultError) {
+          console.error("Error accessing any camera for HR:", defaultError);
+          setHasCameraPermission(false);
+          toast({
+            variant: "destructive",
+            title: "Camera Access Denied",
+            description: "Could not access any camera. Please enable camera permissions in your browser settings.",
+          });
+          setIsCameraMode(false);
+          return;
         }
+      }
+
+      if (stream && videoRef.current) {
+        videoRef.current.srcObject = stream;
         setHasCameraPermission(true);
-      } catch (err) {
-        console.error("Error accessing camera:", err);
+      } else {
         setHasCameraPermission(false);
-        toast({
-          variant: "destructive",
-          title: "Camera Access Denied",
-          description: "Please enable camera permissions in your browser settings to use this feature.",
-        });
+        toast({ variant: "destructive", title: "Camera Error", description: "Could not initialize camera stream." });
         setIsCameraMode(false);
       }
     } else {
@@ -128,7 +144,7 @@ export default function HrPage() {
       
       canvas.toBlob((blob) => {
         if (blob) {
-          const fileName = `capture-${Date.now()}.png`;
+          const fileName = `doc-capture-${Date.now()}.png`;
           const capturedFile = new File([blob], fileName, { type: 'image/png' });
           setSelectedFile(capturedFile);
           documentForm.setValue("name", fileName.split('.').slice(0, -1).join('.') || fileName);
@@ -150,7 +166,7 @@ export default function HrPage() {
     try {
         const newEmployee = await addEmployee({
           ...data,
-          actualSalary: data.actualSalary === null ? undefined : data.actualSalary, // API expects number or undefined
+          actualSalary: data.actualSalary === null ? undefined : data.actualSalary,
         });
         if (newEmployee) {
         toast({ title: "Employee Added", description: `${data.name} has been added.` });
@@ -175,14 +191,18 @@ export default function HrPage() {
       try {
         await addEmployeeDocument(selectedEmployee.id, documentData as Omit<EmployeeDocument, 'id' | 'uploadedAt'>);
         toast({ title: "Document Record Added", description: `Document '${data.name}' added for ${selectedEmployee.name}.` });
-        documentForm.reset();
+        
+        // Reset form and file states
+        documentForm.reset({ name: '', description: '' });
         setSelectedFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
         if (imagePreviewUrl) {
             URL.revokeObjectURL(imagePreviewUrl);
             setImagePreviewUrl(null);
         }
         setIsCameraMode(false);
         stopCameraStream();
+        
         const updatedEmployee = await getEmployeeById(selectedEmployee.id); 
         setSelectedEmployee(updatedEmployee || null);
       } catch (error: any) {
@@ -191,19 +211,24 @@ export default function HrPage() {
     }
   };
 
+  const resetDocumentFormAndStates = () => {
+    documentForm.reset({ name: '', description: '' });
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (imagePreviewUrl) {
+      URL.revokeObjectURL(imagePreviewUrl);
+      setImagePreviewUrl(null);
+    }
+    setIsCameraMode(false);
+    stopCameraStream();
+  };
+
   const openDocumentDialog = async (employeeId: string) => {
     try {
         const employee = await getEmployeeById(employeeId);
         if (employee) {
             setSelectedEmployee(employee);
-            documentForm.reset(); 
-            setSelectedFile(null);
-            if (imagePreviewUrl) {
-                URL.revokeObjectURL(imagePreviewUrl);
-                setImagePreviewUrl(null);
-            }
-            setIsCameraMode(false);
-            stopCameraStream();
+            resetDocumentFormAndStates();
             setIsDocumentDialogMainOpen(true);
         } else {
             toast({title: "Error", description: "Could not load employee data.", variant: "destructive"});
@@ -265,7 +290,7 @@ export default function HrPage() {
   };
 
   const formatFileSize = (bytes?: number): string => {
-    if (bytes === undefined || bytes === null) return "N/A";
+    if (bytes === undefined || bytes === null || isNaN(bytes)) return "N/A";
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
@@ -395,175 +420,187 @@ export default function HrPage() {
         setIsDocumentDialogMainOpen(isOpen);
         if (!isOpen) {
             setSelectedEmployee(null);
-            setSelectedFile(null);
-             if (imagePreviewUrl) {
-                URL.revokeObjectURL(imagePreviewUrl);
-                setImagePreviewUrl(null);
-            }
-            stopCameraStream();
-            setIsCameraMode(false);
+            resetDocumentFormAndStates();
         }
       }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="font-headline">Manage Documents for {selectedEmployee?.name}</DialogTitle>
-            <CardDescription>Add new document records. Metadata is stored in MongoDB. File content is not uploaded to cloud storage in this demo.</CardDescription>
+            <CardDescription>Add new document records. Metadata is stored. File content is not uploaded to cloud storage in this demo.</CardDescription>
           </DialogHeader>
           
-          <Card>
-            <CardHeader><CardTitle className="text-lg font-semibold">Add New Document Record</CardTitle></CardHeader>
-            <CardContent>
-              <Form {...documentForm}>
-                <form onSubmit={documentForm.handleSubmit(onDocumentSubmit)} className="space-y-4">
-                  <FormField control={documentForm.control} name="name" render={({ field }) => (
+          <div className="py-2 max-h-[70vh] overflow-y-auto pr-2">
+            <Card>
+              <CardHeader><CardTitle className="text-lg font-semibold">Add New Document Record</CardTitle></CardHeader>
+              <CardContent>
+                <Form {...documentForm}>
+                  <form onSubmit={documentForm.handleSubmit(onDocumentSubmit)} className="space-y-4">
+                    <FormField control={documentForm.control} name="name" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Document Name / Title <span className="text-destructive">*</span></FormLabel>
+                        <FormControl><Input placeholder="e.g., Passport, Contract, ID Photo" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={documentForm.control} name="description" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description (Optional)</FormLabel>
+                        <FormControl><Textarea placeholder="Brief description or notes about the document" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    
                     <FormItem>
-                      <FormLabel>Document Name / Title</FormLabel>
-                      <FormControl><Input placeholder="e.g., Passport, Contract, ID Photo" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  <FormField control={documentForm.control} name="description" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description (Optional)</FormLabel>
-                      <FormControl><Textarea placeholder="Brief description or notes about the document" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
-                  
-                  {!isCameraMode && (
-                    <FormItem>
-                      <FormLabel>Attach File</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="file" 
-                          onChange={handleFileChange} 
-                          className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
-                        />
-                      </FormControl>
-                      {selectedFile && (
-                          <FormDescription className="flex items-center gap-1 pt-1">
-                              <FileUp className="h-4 w-4 text-muted-foreground" /> Selected: {selectedFile.name} ({formatFileSize(selectedFile.size)}) - Type: {selectedFile.type}
-                          </FormDescription>
+                      <FormLabel>Attach File or Capture Image</FormLabel>
+                      {!isCameraMode && (
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                                <FormControl className="flex-grow min-w-0">
+                                    <Input 
+                                      type="file" 
+                                      ref={fileInputRef}
+                                      onChange={handleFileChange} 
+                                      className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                                    />
+                                </FormControl>
+                                <Button type="button" variant="outline" onClick={startCamera} className="shrink-0" size="default">
+                                    <Camera className="mr-2 h-4 w-4" /> Capture
+                                </Button>
+                            </div>
+                            {selectedFile && (
+                              <div className="flex items-center justify-between gap-2 rounded-md border p-2 bg-muted/50">
+                                <p className="flex items-center gap-1.5 text-xs text-muted-foreground truncate">
+                                  <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                  <span className="truncate" title={selectedFile.name}>
+                                      {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                                  </span>
+                                </p>
+                                <div className="flex gap-1 shrink-0">
+                                  {imagePreviewUrl && (
+                                    <DialogTrigger asChild>
+                                      <Button type="button" variant="ghost" size="sm" onClick={() => {/* Placeholder: Open a modal for this preview if needed */}} className="text-xs h-auto py-1 px-2">
+                                        <Eye className="mr-1 h-3.5 w-3.5" /> View
+                                      </Button>
+                                    </DialogTrigger>
+                                  )}
+                                  <Button type="button" variant="ghost" size="sm" onClick={handleDownloadSelectedFile} className="text-xs h-auto py-1 px-2">
+                                    <Download className="mr-1 h-3.5 w-3.5" /> Download
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                        </div>
                       )}
                     </FormItem>
-                  )}
-
-                  <div className="flex gap-2 flex-wrap">
-                    {!isCameraMode && (
-                        <Button type="button" variant="outline" onClick={startCamera}>
-                            <Camera className="mr-2 h-4 w-4" /> Capture from Camera
-                        </Button>
-                    )}
-                  </div>
-                  
-                  {isCameraMode && (
-                    <Card className="p-4 space-y-3">
-                      <CardTitle className="text-base">Camera Capture</CardTitle>
-                      <div className="relative aspect-video bg-muted rounded-md overflow-hidden">
-                        <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
-                        {hasCameraPermission === false && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white p-4">
-                                <VideoOff className="h-12 w-12 mb-2"/>
-                                <p className="text-center font-semibold">Camera Access Denied</p>
-                                <p className="text-xs text-center">Please enable camera permissions in your browser settings.</p>
-                            </div>
-                        )}
-                         {hasCameraPermission === null && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white p-4">
-                                <Loader2 className="h-12 w-12 mb-2 animate-spin"/>
-                                <p>Accessing camera...</p>
-                            </div>
-                        )}
-                      </div>
-                      <canvas ref={canvasRef} className="hidden"></canvas>
-                      <div className="flex gap-2">
-                        <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission}>
-                          <Camera className="mr-2 h-4 w-4" /> Capture Photo
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => { setIsCameraMode(false); stopCameraStream(); }}>
-                          <XCircle className="mr-2 h-4 w-4" /> Cancel Camera
-                        </Button>
-                      </div>
-                    </Card>
-                  )}
-
-
-                  {imagePreviewUrl && selectedFile && selectedFile.type.startsWith('image/') && (
-                    <div className="my-4 p-2 border rounded-md">
-                      <FormLabel className="text-sm">Preview:</FormLabel>
-                      <NextImage src={imagePreviewUrl} alt="Selected image preview" width={200} height={200} className="mt-2 rounded-md object-contain max-h-48 w-auto" />
-                    </div>
-                  )}
-                  {selectedFile && !selectedFile.type.startsWith('image/') && (
-                     <div className="my-4 p-3 border rounded-md bg-muted/50">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <FileWarning className="h-5 w-5 text-amber-500" />
-                            <span>No preview available for this file type ({selectedFile.type}).</span>
+                    
+                    {isCameraMode && (
+                      <Card className="p-4 space-y-3 border-dashed">
+                        <CardTitle className="text-base font-semibold">Camera Capture</CardTitle>
+                        <div className="relative aspect-video bg-muted rounded-md overflow-hidden">
+                          <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
+                          {hasCameraPermission === false && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white p-4">
+                                  <VideoOff className="h-10 w-10 mb-2"/>
+                                  <p className="text-center font-semibold">Camera Access Denied</p>
+                                  <p className="text-xs text-center">Please enable permissions.</p>
+                              </div>
+                          )}
+                           {hasCameraPermission === null && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 text-white p-4">
+                                  <Loader2 className="h-10 w-10 mb-2 animate-spin"/>
+                                  <p>Accessing camera...</p>
+                              </div>
+                          )}
                         </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2 items-center">
-                    <Button type="submit" disabled={!selectedFile && !documentForm.getValues("name")}><PlusCircle className="mr-2 h-4 w-4"/> Add Document Record</Button>
-                    {selectedFile && (
-                      <Button type="button" variant="outline" onClick={handleDownloadSelectedFile}>
-                        <Download className="mr-2 h-4 w-4" /> Download Selected File
-                      </Button>
-                    )}
-                  </div>
-                   <FormDescription className="text-xs">
-                        Adding a record stores metadata (name, description, file details) in MongoDB.
-                        The "Download Selected File" button works only for the file currently chosen/captured above and downloads it from your browser.
-                    </FormDescription>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
-
-          {selectedEmployee && selectedEmployee.documents.length > 0 && (
-            <Card className="mt-6">
-              <CardHeader><CardTitle className="text-lg font-semibold">Uploaded Document Records</CardTitle></CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>File</TableHead>
-                      <TableHead>Uploaded At</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedEmployee.documents.map(doc => (
-                      <TableRow key={doc.id}>
-                        <TableCell className="font-medium">{doc.name}</TableCell>
-                        <TableCell className="truncate max-w-xs">
-                          {doc.fileName ? (
-                             <Badge variant="secondary" className="flex items-center gap-1 w-fit">
-                                <FileUp className="h-3 w-3"/> {doc.fileName}
-                             </Badge>
-                          ) : <span className="text-muted-foreground text-xs">No file attached</span>}
-                        </TableCell>
-                        <TableCell>{format(new Date(doc.uploadedAt), "PPP p")}</TableCell>
-                        <TableCell className="text-right space-x-1">
-                          <Button variant="ghost" size="icon" onClick={() => handleOpenPreviewDialog(doc)} aria-label="Preview document metadata">
-                            <Eye className="h-4 w-4" />
-                            <span className="sr-only">Preview</span>
+                        <canvas ref={canvasRef} className="hidden"></canvas>
+                        <div className="flex gap-2">
+                          <Button type="button" onClick={handleCapturePhoto} disabled={!hasCameraPermission} size="sm">
+                            <Camera className="mr-2 h-4 w-4" /> Capture Photo
                           </Button>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })} aria-label="Delete document record">
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                                <span className="sr-only">Delete</span>
-                            </Button>
-                          </AlertDialogTrigger>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                          <Button type="button" variant="outline" onClick={() => { setIsCameraMode(false); stopCameraStream(); }} size="sm">
+                            <XCircle className="mr-2 h-4 w-4" /> Cancel Camera
+                          </Button>
+                        </div>
+                        {selectedFile && isCameraMode && ( 
+                          <p className="flex items-center gap-1 pt-1 text-xs text-muted-foreground">
+                              <Paperclip className="h-3 w-3 text-muted-foreground" /> Captured: {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                          </p>
+                        )}
+                      </Card>
+                    )}
+
+                    {imagePreviewUrl && selectedFile && selectedFile.type.startsWith('image/') && !isCameraMode && (
+                      <div className="my-2 p-2 border rounded-md max-w-xs">
+                        <FormLabel className="text-xs">Preview:</FormLabel>
+                        <NextImage src={imagePreviewUrl} alt="Selected image preview" width={150} height={150} className="mt-1 rounded-md object-contain max-h-36 w-auto" />
+                      </div>
+                    )}
+                    {selectedFile && !selectedFile.type.startsWith('image/') && !imagePreviewUrl && !isCameraMode && (
+                        <div className="my-2 p-2 border rounded-md bg-muted/50 text-xs">
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                                <FileWarning className="h-4 w-4 text-amber-500" />
+                                <span>No preview for {selectedFile.type}.</span>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2 items-center pt-2">
+                      <Button type="submit" disabled={!documentForm.getValues("name")}><PlusCircle className="mr-2 h-4 w-4"/> Add Document Record</Button>
+                    </div>
+                     <FormDescription className="text-xs pt-1">
+                          Adding a record stores metadata (name, description, file details).
+                          The "Download" button works for the file currently chosen/captured above.
+                      </FormDescription>
+                  </form>
+                </Form>
               </CardContent>
             </Card>
-          )}
+
+            {selectedEmployee && selectedEmployee.documents.length > 0 && (
+              <Card className="mt-6">
+                <CardHeader><CardTitle className="text-lg font-semibold">Uploaded Document Records</CardTitle></CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>File</TableHead>
+                        <TableHead>Uploaded At</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedEmployee.documents.map(doc => (
+                        <TableRow key={doc.id}>
+                          <TableCell className="font-medium">{doc.name}</TableCell>
+                          <TableCell className="truncate max-w-xs">
+                            {doc.fileName ? (
+                               <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                                  <FileUp className="h-3 w-3"/> {doc.fileName} ({formatFileSize(doc.fileSize)})
+                               </Badge>
+                            ) : <span className="text-muted-foreground text-xs italic">No file attached</span>}
+                          </TableCell>
+                          <TableCell>{format(new Date(doc.uploadedAt), "PPP p")}</TableCell>
+                          <TableCell className="text-right space-x-1">
+                            <Button variant="ghost" size="icon" onClick={() => handleOpenPreviewDialog(doc)} aria-label="Preview document metadata">
+                              <Eye className="h-4 w-4" />
+                              <span className="sr-only">Preview</span>
+                            </Button>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" onClick={() => setDocumentToDelete({ empId: selectedEmployee.id, docId: doc.id, docName: doc.name })} aria-label="Delete document record">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                  <span className="sr-only">Delete</span>
+                              </Button>
+                            </AlertDialogTrigger>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
            <DialogFooter className="mt-4">
              <DialogClose asChild><Button type="button" variant="outline">Close</Button></DialogClose>
            </DialogFooter>
@@ -593,10 +630,9 @@ export default function HrPage() {
                 <InfoIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 <AlertTitle className="text-blue-700 dark:text-blue-300">Important Note on File Handling</AlertTitle>
                 <AlertDescription className="text-xs text-blue-600 dark:text-blue-400">
-                  This application demo stores document metadata (like name and file details) in MongoDB.
+                  This application demo stores document metadata (like name and file details).
                   Actual file content (the file itself) is not uploaded to or stored on any server or cloud storage.
                   Therefore, direct preview or download of previously "uploaded" files from this dialog is not possible.
-                  The "Download Selected File" button in the "Add Document Record" form only works for the file currently selected/captured in your browser before its metadata is saved.
                 </AlertDescription>
               </Alert>
             </div>
@@ -640,5 +676,3 @@ export default function HrPage() {
     </div>
   );
 }
-
-    
