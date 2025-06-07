@@ -16,13 +16,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { DatePicker } from '@/components/shared/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSpreadsheet, PlusCircle, Trash2, Eye, Check, ChevronsUpDown } from 'lucide-react';
+import { FileSpreadsheet, PlusCircle, Trash2, Eye, Check, ChevronsUpDown, Mail } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { format, addDays } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
+import { SendInvoiceEmailDialog } from '@/components/shared/send-invoice-email-dialog';
 
 const lineItemSchema = z.object({
   id: z.string().optional(), 
@@ -36,7 +37,7 @@ const invoiceSchema = z.object({
   companyName: z.string().min(1, "Your company name is required"),
   companyAddress: z.string().optional(),
   employeeId: z.string().optional().nullable(),
-  serviceProviderName: z.string().optional().nullable(), // Can also be null
+  serviceProviderName: z.string().optional().nullable(), 
   customerName: z.string().min(1, "Customer name is required"),
   customerAddress: z.string().optional(),
   invoiceDate: z.date({ required_error: "Invoice date is required."}),
@@ -53,16 +54,15 @@ export default function InvoicingPage() {
   const { employees, invoices, addInvoice, getNextInvoiceNumber } = useAppData();
   const { toast } = useToast();
   const [isInvoiceFormOpen, setIsInvoiceFormOpen] = useState(false);
+  const [selectedInvoiceForEmail, setSelectedInvoiceForEmail] = useState<{ id: string; invoiceNumber: string; customerName: string; } | null>(null);
 
-  // State for the Service Provider Combobox
   const [serviceProviderComboboxOpen, setServiceProviderComboboxOpen] = useState(false);
-  // This state holds the current text in the combobox input, separate from form values initially
   const [serviceProviderSearchText, setServiceProviderSearchText] = useState("");
 
   const form = useForm<InvoiceFormData>({
     resolver: zodResolver(invoiceSchema),
     defaultValues: {
-      companyName: 'My Awesome Company LLC', 
+      companyName: 'FlowHQ', 
       companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321', 
       customerName: '',
       customerAddress: '',
@@ -86,7 +86,6 @@ export default function InvoicingPage() {
   const watchedEmployeeId = form.watch("employeeId");
   const watchedServiceProviderName = form.watch("serviceProviderName");
 
-  // Effect to set the initial text for the combobox based on form values (e.g., when editing an invoice later)
   useEffect(() => {
     if (watchedEmployeeId) {
       const employee = employees.find(emp => emp.id === watchedEmployeeId);
@@ -96,11 +95,9 @@ export default function InvoicingPage() {
     }
   }, [watchedEmployeeId, watchedServiceProviderName, employees]);
 
-
-  const onSubmit: SubmitHandler<InvoiceFormData> = (data) => {
+  const onSubmit: SubmitHandler<InvoiceFormData> = async (data) => {
     const processedData = {
       ...data,
-      // Ensure only one of employeeId or serviceProviderName is substantially set
       employeeId: data.employeeId || undefined,
       serviceProviderName: data.employeeId ? undefined : (data.serviceProviderName || undefined),
       lineItems: data.lineItems.map(item => ({
@@ -108,63 +105,72 @@ export default function InvoicingPage() {
         total: (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
       })),
     };
-    const newInvoice = addInvoice(processedData);
-    toast({
-      title: "Invoice Created",
-      description: `Invoice ${newInvoice.invoiceNumber} for ${data.customerName} has been created.`,
-    });
-    form.reset({
-      companyName: 'My Awesome Company LLC',
-      companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321',
-      customerName: '',
-      customerAddress: '',
-      invoiceDate: new Date(),
-      dueDate: addDays(new Date(), 30),
-      lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
-      taxRate: 0,
-      notes: '',
-      status: 'Draft',
-      employeeId: null,
-      serviceProviderName: '',
-    });
-    setServiceProviderSearchText(""); // Reset combobox text
-    setIsInvoiceFormOpen(false);
+    const newInvoice = await addInvoice(processedData);
+    if (newInvoice) {
+        toast({
+        title: "Invoice Created",
+        description: `Invoice ${newInvoice.invoiceNumber} for ${data.customerName} has been created.`,
+        });
+        form.reset({
+        companyName: 'FlowHQ',
+        companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321',
+        customerName: '',
+        customerAddress: '',
+        invoiceDate: new Date(),
+        dueDate: addDays(new Date(), 30),
+        lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
+        taxRate: 0,
+        notes: '',
+        status: 'Draft',
+        employeeId: null,
+        serviceProviderName: '',
+        });
+        setServiceProviderSearchText(""); 
+        setIsInvoiceFormOpen(false);
+    } else {
+        toast({
+            title: "Error",
+            description: "Failed to create invoice.",
+            variant: "destructive"
+        });
+    }
   };
   
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
   const handleServiceProviderSelect = (employee: Employee) => {
     form.setValue('employeeId', employee.id);
-    form.setValue('serviceProviderName', ''); // Clear manual name
-    setServiceProviderSearchText(employee.name); // Update display text
+    form.setValue('serviceProviderName', ''); 
+    setServiceProviderSearchText(employee.name); 
     setServiceProviderComboboxOpen(false);
   };
 
   const handleServiceProviderComboboxBlur = () => {
-    // If no employeeId is set (meaning nothing was selected from list)
-    // and there is text in search, this text becomes the serviceProviderName.
     const currentEmployeeId = form.getValues('employeeId');
     if (!currentEmployeeId && serviceProviderSearchText.trim()) {
       form.setValue('serviceProviderName', serviceProviderSearchText.trim());
     } else if (!serviceProviderSearchText.trim() && !currentEmployeeId) {
-      // If text is cleared and no employee selected, clear both form fields
       form.setValue('serviceProviderName', '');
       form.setValue('employeeId', null);
     }
-    // If an employeeId IS set, serviceProviderSearchText should ideally match.
-    // If it doesn't, it implies user manually changed text after selection.
-    // In this scenario, we might want to clear employeeId.
     const selectedEmployee = employees.find(e => e.id === currentEmployeeId);
     if (selectedEmployee && selectedEmployee.name !== serviceProviderSearchText.trim()) {
-        form.setValue('employeeId', null); // User overrode selection with manual text
+        form.setValue('employeeId', null); 
         form.setValue('serviceProviderName', serviceProviderSearchText.trim());
     }
-
   };
   
   const currentServiceProviderDisplay = watchedEmployeeId 
     ? employees.find(e => e.id === watchedEmployeeId)?.name 
     : watchedServiceProviderName;
+
+  const handleOpenEmailDialog = (invoice: Invoice) => {
+    setSelectedInvoiceForEmail({
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        customerName: invoice.customerName,
+    });
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -173,8 +179,21 @@ export default function InvoicingPage() {
           <FileSpreadsheet className="mr-3 h-8 w-8 text-primary" /> Invoicing
         </h1>
         <Button onClick={() => {
-          form.reset(); // Reset form to defaults when opening
-          setServiceProviderSearchText(""); // Clear combobox text
+          form.reset({
+            companyName: 'FlowHQ', 
+            companyAddress: '123 Business Rd, Suite 404, BizTown, ST 54321', 
+            customerName: '',
+            customerAddress: '',
+            invoiceDate: new Date(),
+            dueDate: addDays(new Date(), 30),
+            lineItems: [{ description: '', quantity: 1, unitPrice: 0, total: 0 }],
+            taxRate: 0,
+            notes: '',
+            status: 'Draft',
+            employeeId: null, 
+            serviceProviderName: '',
+          });
+          setServiceProviderSearchText(""); 
           setIsInvoiceFormOpen(true);
         }}>
           <PlusCircle className="mr-2 h-5 w-5" /> Create New Invoice
@@ -227,7 +246,7 @@ export default function InvoicingPage() {
                   <FormLabel>Service Provider (Select existing or type new)</FormLabel>
                   <Popover open={serviceProviderComboboxOpen} onOpenChange={(open) => {
                       setServiceProviderComboboxOpen(open);
-                      if(!open) handleServiceProviderComboboxBlur(); // Apply logic when popover closes
+                      if(!open) handleServiceProviderComboboxBlur(); 
                   }}>
                     <PopoverTrigger asChild>
                       <FormControl>
@@ -243,14 +262,13 @@ export default function InvoicingPage() {
                       </FormControl>
                     </PopoverTrigger>
                     <PopoverContent className="w-[--radix-popover-trigger-width] p-0" 
-                        onCloseAutoFocus={(e) => e.preventDefault()} // Prevents focus shift issues
+                        onCloseAutoFocus={(e) => e.preventDefault()} 
                     >
                       <Command>
                         <CommandInput
                           placeholder="Search employee or type name..."
                           value={serviceProviderSearchText}
                           onValueChange={setServiceProviderSearchText}
-                          // onBlur={handleServiceProviderComboboxBlur} // Blur handled by Popover onOpenChange
                         />
                         <CommandList>
                           <CommandEmpty>No employee found. Type to add manually.</CommandEmpty>
@@ -258,7 +276,7 @@ export default function InvoicingPage() {
                             {employees.map((employee) => (
                               <CommandItem
                                 key={employee.id}
-                                value={employee.name} // Value for CMDK filtering/selection
+                                value={employee.name} 
                                 onSelect={() => handleServiceProviderSelect(employee)}
                               >
                                 <Check
@@ -277,7 +295,6 @@ export default function InvoicingPage() {
                   </Popover>
                   <FormMessage>{form.formState.errors.employeeId?.message || form.formState.errors.serviceProviderName?.message}</FormMessage>
                 </FormItem>
-
 
                 <div className="grid md:grid-cols-2 gap-4">
                   <FormField control={form.control} name="invoiceDate" render={({ field }) => (
@@ -429,9 +446,12 @@ export default function InvoicingPage() {
                         {invoice.status}
                         </span>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right space-x-1">
                       <Button asChild variant="outline" size="sm">
                         <Link href={`/invoicing/${invoice.id}`}><Eye className="mr-2 h-4 w-4" /> View</Link>
+                      </Button>
+                       <Button variant="outline" size="sm" onClick={() => handleOpenEmailDialog(invoice)}>
+                        <Mail className="mr-2 h-4 w-4" /> Email
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -443,7 +463,11 @@ export default function InvoicingPage() {
           )}
         </CardContent>
       </Card>
+      <SendInvoiceEmailDialog 
+        isOpen={!!selectedInvoiceForEmail} 
+        onOpenChange={(isOpen) => { if (!isOpen) setSelectedInvoiceForEmail(null);}} 
+        invoiceData={selectedInvoiceForEmail} 
+      />
     </div>
   );
 }
-

@@ -8,11 +8,12 @@ import type { Invoice, Employee } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowLeft, Printer, Edit, CheckCircle, Send, AlertTriangle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Printer, Edit, CheckCircle, Send, AlertTriangle, Loader2, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import { AppLogo } from '@/components/shared/app-logo'; 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SendInvoiceEmailDialog } from '@/components/shared/send-invoice-email-dialog';
 
 
 export default function InvoiceDetailPage() {
@@ -23,6 +24,7 @@ export default function InvoiceDetailPage() {
   const [invoice, setInvoice] = useState<Invoice | null | undefined>(undefined); 
   const [serviceEmployee, setServiceEmployee] = useState<Employee | null | undefined>(undefined);
   const [isLoadingEmployee, setIsLoadingEmployee] = useState(false);
+  const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
 
   const invoiceId = typeof params.invoiceId === 'string' ? params.invoiceId : '';
 
@@ -54,7 +56,7 @@ export default function InvoiceDetailPage() {
         }
       } else {
         setServiceEmployee(null); 
-        setIsLoadingEmployee(false); // Ensure loading is false if no employeeId
+        setIsLoadingEmployee(false); 
       }
     };
 
@@ -67,10 +69,12 @@ export default function InvoiceDetailPage() {
     window.print();
   };
 
-  const handleStatusChange = (newStatus: Invoice['status']) => {
+  const handleStatusChange = async (newStatus: Invoice['status']) => {
     if (invoice) {
-        updateInvoiceStatus(invoice.id, newStatus);
-        setInvoice(prev => prev ? {...prev, status: newStatus} : null); 
+        await updateInvoiceStatus(invoice.id, newStatus);
+        // Refetch or update local state for invoice to reflect new status
+        const updatedInvoice = getInvoiceById(invoice.id);
+        setInvoice(updatedInvoice || null); 
         toast({
             title: "Invoice Status Updated",
             description: `Invoice ${invoice.invoiceNumber} status changed to ${newStatus}.`,
@@ -120,9 +124,9 @@ export default function InvoiceDetailPage() {
         <Button variant="outline" onClick={() => router.push('/invoicing')}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Invoices
         </Button>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
             <Select value={invoice.status} onValueChange={(value: Invoice['status']) => handleStatusChange(value)}>
-                <SelectTrigger className="w-[180px]">
+                <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Change status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -132,6 +136,9 @@ export default function InvoiceDetailPage() {
                     <SelectItem value="Overdue">Overdue</SelectItem>
                 </SelectContent>
             </Select>
+            <Button onClick={() => setIsEmailDialogOpen(true)}>
+                <Mail className="mr-2 h-4 w-4" /> Send by Email
+            </Button>
             <Button onClick={handlePrint}>
                 <Printer className="mr-2 h-4 w-4" /> Print / PDF
             </Button>
@@ -230,6 +237,12 @@ export default function InvoiceDetailPage() {
         </CardFooter>
       </Card>
       
+      <SendInvoiceEmailDialog
+        isOpen={isEmailDialogOpen}
+        onOpenChange={setIsEmailDialogOpen}
+        invoiceData={invoice ? { id: invoice.id, invoiceNumber: invoice.invoiceNumber, customerName: invoice.customerName } : null}
+      />
+
       <style jsx global>{`
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
