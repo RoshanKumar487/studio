@@ -247,7 +247,7 @@ export default function ExpensesPage() {
                   name="date"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>Date</FormLabel>
+                      <FormLabel>Date <span className="text-destructive">*</span></FormLabel>
                       <DatePicker date={field.value} setDate={field.onChange} />
                       <FormMessage />
                     </FormItem>
@@ -258,7 +258,7 @@ export default function ExpensesPage() {
                   name="amount"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>Amount</FormLabel>
+                      <FormLabel>Amount <span className="text-destructive">*</span></FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" placeholder="0.00" {...field} />
                       </FormControl>
@@ -273,7 +273,7 @@ export default function ExpensesPage() {
                 name="category"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Category</FormLabel>
+                    <FormLabel>Category <span className="text-destructive">*</span></FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -295,7 +295,7 @@ export default function ExpensesPage() {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel>Description <span className="text-destructive">*</span></FormLabel>
                     <FormControl>
                       <Textarea placeholder="e.g., Monthly software subscription" {...field} />
                     </FormControl>
@@ -330,7 +330,7 @@ export default function ExpensesPage() {
                           className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
                         />
                       </FormControl>
-                      <Button type="button" variant="outline" onClick={startCamera} className="shrink-0">
+                      <Button type="button" variant="outline" onClick={startCamera} className="shrink-0" size="default"> {/* Changed size to default */}
                         <Camera className="mr-2 h-4 w-4" /> Capture
                       </Button>
                     </div>
