@@ -3,85 +3,28 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { MongoClient, ObjectId, ServerApiVersion } from 'mongodb';
 import type { Employee, EmployeeDocument } from '@/lib/types';
-import { v4 as uuidv4 } from 'uuid'; // For generating unique static IDs if needed
-
-// Re-define staticEmployees here or import if modularized. For simplicity, redefined.
-const staticEmployeesList: Employee[] = [
-  {
-    id: 'static-emp-alice', // Use a fixed, predictable ID for testing specific GETs
-    name: 'Alice Wonderland',
-    email: 'alice@example.com',
-    jobTitle: 'Dream Interpreter',
-    startDate: new Date(2023, 0, 15),
-    employmentType: 'Full-time',
-    actualSalary: 60000,
-    documents: [],
-  },
-  {
-    id: 'static-emp-bob', // Use a fixed, predictable ID
-    name: 'Bob The Builder',
-    email: 'bob@example.com',
-    jobTitle: 'Lead Architect',
-    startDate: new Date(2022, 5, 1),
-    employmentType: 'Contract',
-    actualSalary: 75000,
-    documents: [],
-  },
-];
-
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const uri = process.env.MONGODB_URI;
   const { employeeId } = req.query;
 
-  if (typeof employeeId !== 'string') { // Removed ObjectId.isValid for static IDs
-    return res.status(400).json({ message: 'Invalid employee ID format.' });
+  if (typeof employeeId !== 'string') {
+    return res.status(400).json({ message: 'Invalid employee ID format (query param).' });
   }
   
   if (!uri) {
-    const warningMessageBase = `MONGODB_URI is not configured. Operations for employee ${employeeId} will be limited/mocked. Please set MONGODB_URI in your .env.local file and restart the server for real data.`;
-    console.warn("**************************************************************************************");
-    console.warn(`WARNING: ${warningMessageBase}`);
-    console.warn("**************************************************************************************");
-
-    if (req.method === 'GET') {
-      const staticEmployee = staticEmployeesList.find(emp => emp.id === employeeId);
-      if (staticEmployee) {
-        return res.status(200).json({
-          ...staticEmployee,
-          startDate: staticEmployee.startDate ? staticEmployee.startDate.toISOString() : null,
-        });
-      }
-      return res.status(404).json({ message: `Employee ${employeeId} not found (MongoDB URI not configured or ID does not match static employees).` });
-    }
-    if (req.method === 'PUT') {
-       const staticEmployee = staticEmployeesList.find(emp => emp.id === employeeId);
-       if (staticEmployee) {
-           // Mock update: just return the data that would have been updated
-           const { documents, name, email, jobTitle, startDate, employmentType, actualSalary } = req.body as Partial<Employee>;
-            const updatedMockEmployee = {
-                ...staticEmployee, // Start with existing static data
-                name: name !== undefined ? name : staticEmployee.name,
-                email: email !== undefined ? email : staticEmployee.email,
-                jobTitle: jobTitle !== undefined ? jobTitle : staticEmployee.jobTitle,
-                startDate: startDate !== undefined ? (startDate ? new Date(startDate) : null) : staticEmployee.startDate,
-                employmentType: employmentType !== undefined ? employmentType : staticEmployee.employmentType,
-                actualSalary: actualSalary !== undefined ? (actualSalary === null ? null : (typeof actualSalary === 'string' ? parseFloat(actualSalary) : actualSalary)) : staticEmployee.actualSalary,
-                documents: documents !== undefined ? documents : staticEmployee.documents,
-            };
-           return res.status(200).json({
-             ...updatedMockEmployee,
-             startDate: updatedMockEmployee.startDate ? updatedMockEmployee.startDate.toISOString() : null,
-           });
-       }
-      return res.status(500).json({ message: `MongoDB URI is not configured. Cannot update employee ${employeeId}.` });
-    }
-    res.setHeader('Allow', ['GET', 'PUT']);
-    return res.status(405).json({ message: `Method ${req.method} Not Allowed on employee ${employeeId} without DB config` });
+    const criticalMessage = `CRITICAL: MONGODB_URI is not configured. Operations for employee ${employeeId} are disabled.`;
+    console.error("**************************************************************************************");
+    console.error(criticalMessage);
+    console.error(`Attempted operation: ${req.method} on ${req.url}`);
+    console.error("**************************************************************************************");
+    return res.status(503).json({ 
+        message: "Service Unavailable: Database is not configured. Please set the MONGODB_URI environment variable.",
+        errorContext: `Operation: ${req.method} on ${req.url}` 
+    });
   }
 
-  // Database connected logic remains below
-  if (!ObjectId.isValid(employeeId)) { // ObjectId check only if DB is connected
+  if (!ObjectId.isValid(employeeId)) {
     return res.status(400).json({ message: 'Invalid employee ID format for database query.' });
   }
 
@@ -118,13 +61,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (employmentType !== undefined) updateFields.employmentType = employmentType;
       if (actualSalary !== undefined) updateFields.actualSalary = actualSalary === null ? null : (typeof actualSalary === 'string' ? parseFloat(actualSalary) : actualSalary) ;
 
-
       if (documents !== undefined) {
         if (!Array.isArray(documents)) {
           return res.status(400).json({ message: 'If provided, documents must be an array.' });
         }
         updateFields.documents = documents.map((doc: EmployeeDocument) => ({
-          id: doc.id || new ObjectId().toHexString(), // Use existing ID or generate new for docs
+          id: doc.id || new ObjectId().toHexString(), 
           name: doc.name,
           description: doc.description,
           uploadedAt: doc.uploadedAt ? new Date(doc.uploadedAt) : new Date(),
@@ -170,7 +112,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   } catch (error) {
     console.error(`API Error for employee ${employeeId}:`, error);
-    // Removed the ObjectId specific error check here as it's now conditional
     res.status(500).json({ message: 'Internal Server Error communicating with database.' });
   } finally {
     if (client) {

@@ -4,39 +4,19 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
 import type { RevenueEntry } from '@/lib/types';
 
-// Mock data if MongoDB URI is not set
-const staticRevenue: RevenueEntry[] = [
-  { id: 'static-rev-1', date: new Date(2024, 6, 1), amount: 1200, description: "Web design project (Mock)" },
-  { id: 'static-rev-2', date: new Date(2024, 6, 5), amount: 750, description: "Consulting services (Mock)" },
-];
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const uri = process.env.MONGODB_URI;
 
   if (!uri) {
-    const warningMessage = "MONGODB_URI is not configured. Revenue data operations will be mocked. Please set MONGODB_URI in your .env.local file and restart the server for real data.";
-    console.warn("**************************************************************************************");
-    console.warn(`WARNING: ${warningMessage}`);
-    console.warn("**************************************************************************************");
-
-    if (req.method === 'GET') {
-      return res.status(200).json(staticRevenue.map(r => ({...r, date: r.date.toISOString() })));
-    }
-    if (req.method === 'POST') {
-      const { date, amount, description } = req.body as Omit<RevenueEntry, 'id'>;
-      if (!date || amount == null || !description) {
-        return res.status(400).json({ message: 'Missing required fields for mock revenue entry.' });
-      }
-      const newMockRevenue: RevenueEntry = {
-        id: `static-rev-${Date.now()}`,
-        date: new Date(date),
-        amount: Number(amount),
-        description,
-      };
-      return res.status(201).json({...newMockRevenue, date: newMockRevenue.date.toISOString() });
-    }
-    res.setHeader('Allow', ['GET', 'POST']);
-    return res.status(405).json({ message: `Method ${req.method} Not Allowed without DB config` });
+    const criticalMessage = "CRITICAL: MONGODB_URI is not configured. Revenue data operations are disabled.";
+    console.error("**************************************************************************************");
+    console.error(criticalMessage);
+    console.error(`Attempted operation: ${req.method} on ${req.url}`);
+    console.error("**************************************************************************************");
+    return res.status(503).json({ 
+        message: "Service Unavailable: Database is not configured. Please set the MONGODB_URI environment variable.",
+        errorContext: `Operation: ${req.method} on ${req.url}` 
+    });
   }
 
   let client: MongoClient | null = null;
@@ -51,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const entriesResult: RevenueEntry[] = entriesFromDb.map(entry => ({ 
         ...entry, 
         id: entry._id!.toString(),
-        date: new Date(entry.date), // Ensure date is a Date object
+        date: new Date(entry.date),
       }));
       res.status(200).json(entriesResult);
     } else if (req.method === 'POST') {
