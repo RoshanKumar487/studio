@@ -90,7 +90,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const objectId = new ObjectId(employeeId);
     client = new MongoClient(uri, { serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true }});
     await client.connect();
-    const db = client.db("bizViewApp"); 
+    const db = client.db("flowHQApp"); 
     const employeesCollection = db.collection<Omit<Employee, 'id'> & { _id?: ObjectId }>('employees');
 
     if (req.method === 'GET') {
