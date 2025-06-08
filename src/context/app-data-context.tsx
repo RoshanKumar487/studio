@@ -54,63 +54,107 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   // Fetch all data on initial load
   useEffect(() => {
     const fetchData = async () => {
+      // Fetch Employees
       try {
         setLoadingEmployees(true);
         const empResponse = await fetch('/api/employees');
-        if (!empResponse.ok) throw new Error(`Failed to fetch employees (Status: ${empResponse.status})`);
-        const empData: Employee[] = await empResponse.json();
-        setEmployees(empData.map(emp => ({
-            ...emp,
-            documents: Array.isArray(emp.documents) ? emp.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
-            startDate: emp.startDate ? new Date(emp.startDate) : null,
-            actualSalary: emp.actualSalary === undefined ? null : emp.actualSalary,
-        })).sort((a, b) => a.name.localeCompare(b.name)));
-      } catch (error) {
+        if (!empResponse.ok) {
+          if (empResponse.status === 503) {
+            console.warn("Database not configured for employees. Skipping initial employee load.");
+            toast({ title: "Employee Data Unavailable", description: "Database not configured. Employee features may be limited.", variant: "default" });
+            setEmployees([]);
+          } else {
+            throw new Error(`Failed to fetch employees (Status: ${empResponse.status})`);
+          }
+        } else {
+          const empData: Employee[] = await empResponse.json();
+          setEmployees(empData.map(emp => ({
+              ...emp,
+              documents: Array.isArray(emp.documents) ? emp.documents.map(doc => ({...doc, uploadedAt: new Date(doc.uploadedAt)})) : [],
+              startDate: emp.startDate ? new Date(emp.startDate) : null,
+              actualSalary: emp.actualSalary === undefined ? null : emp.actualSalary,
+          })).sort((a, b) => a.name.localeCompare(b.name)));
+        }
+      } catch (error: any) {
         console.error("Error fetching employees:", error);
-        toast({ title: "Error", description: "Could not load employee data.", variant: "destructive"});
+        toast({ title: "Error Loading Employees", description: error.message || "Could not load employee data.", variant: "destructive"});
+        setEmployees([]); // Set to empty on error
       } finally {
         setLoadingEmployees(false);
       }
 
+      // Fetch Revenue
       try {
         setLoadingRevenue(true);
         const revResponse = await fetch('/api/revenue');
-        if (!revResponse.ok) throw new Error(`Failed to fetch revenue (Status: ${revResponse.status})`);
-        const revData: RevenueEntry[] = await revResponse.json();
-        setRevenueEntries(revData.map(r => ({...r, date: new Date(r.date)})));
-      } catch (error) {
+        if (!revResponse.ok) {
+           if (revResponse.status === 503) {
+            console.warn("Database not configured for revenue. Skipping initial revenue load.");
+            toast({ title: "Revenue Data Unavailable", description: "Database not configured. Revenue features may be limited.", variant: "default" });
+            setRevenueEntries([]);
+          } else {
+            throw new Error(`Failed to fetch revenue (Status: ${revResponse.status})`);
+          }
+        } else {
+          const revData: RevenueEntry[] = await revResponse.json();
+          setRevenueEntries(revData.map(r => ({...r, date: new Date(r.date)})));
+        }
+      } catch (error: any) {
         console.error("Error fetching revenue:", error);
-        toast({ title: "Error", description: "Could not load revenue data.", variant: "destructive"});
+        toast({ title: "Error Loading Revenue", description: error.message || "Could not load revenue data.", variant: "destructive"});
+        setRevenueEntries([]);
       } finally {
         setLoadingRevenue(false);
       }
 
+      // Fetch Expenses
       try {
         setLoadingExpenses(true);
         const expResponse = await fetch('/api/expenses');
-        if (!expResponse.ok) throw new Error(`Failed to fetch expenses (Status: ${expResponse.status})`);
-        const expData: ExpenseEntry[] = await expResponse.json();
-        setExpenseEntries(expData.map(e => ({...e, date: new Date(e.date)})));
-      } catch (error) {
+        if (!expResponse.ok) {
+          if (expResponse.status === 503) {
+            console.warn("Database not configured for expenses. Skipping initial expense load.");
+            toast({ title: "Expense Data Unavailable", description: "Database not configured. Expense features may be limited.", variant: "default" });
+            setExpenseEntries([]);
+          } else {
+            throw new Error(`Failed to fetch expenses (Status: ${expResponse.status})`);
+          }
+        } else {
+          const expData: ExpenseEntry[] = await expResponse.json();
+          setExpenseEntries(expData.map(e => ({...e, date: new Date(e.date)})));
+        }
+      } catch (error: any) {
         console.error("Error fetching expenses:", error);
-        toast({ title: "Error", description: "Could not load expense data.", variant: "destructive"});
+        toast({ title: "Error Loading Expenses", description: error.message || "Could not load expense data.", variant: "destructive"});
+        setExpenseEntries([]);
       } finally {
         setLoadingExpenses(false);
       }
 
+      // Fetch Invoices
       try {
         setLoadingInvoices(true);
         const invResponse = await fetch('/api/invoices');
-        if (!invResponse.ok) throw new Error(`Failed to fetch invoices (Status: ${invResponse.status})`);
-        const invData: Invoice[] = await invResponse.json();
-        setInvoices(invData.map(i => ({
-            ...i, 
-            invoiceDate: new Date(i.invoiceDate), 
-            dueDate: new Date(i.dueDate)
-        })));
-      } catch (error) {
+        if (!invResponse.ok) {
+          if (invResponse.status === 503) {
+            console.warn("Database not configured for invoices. Skipping initial invoice load.");
+            toast({ title: "Invoice Data Unavailable", description: "Database not configured. Invoicing features may be limited.", variant: "default" });
+            setInvoices([]);
+          } else {
+            throw new Error(`Failed to fetch invoices (Status: ${invResponse.status})`);
+          }
+        } else {
+          const invData: Invoice[] = await invResponse.json();
+          setInvoices(invData.map(i => ({
+              ...i, 
+              invoiceDate: new Date(i.invoiceDate), 
+              dueDate: new Date(i.dueDate)
+          })));
+        }
+      } catch (error: any) {
         console.error("Error fetching invoices:", error);
-        toast({ title: "Error", description: "Could not load invoice data.", variant: "destructive"});
+        toast({ title: "Error Loading Invoices", description: error.message || "Could not load invoice data.", variant: "destructive"});
+        setInvoices([]);
       } finally {
         setLoadingInvoices(false);
       }
@@ -210,6 +254,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       const response = await fetch(`/api/employees/${employeeId}`);
       if (!response.ok) {
         if (response.status === 404) return undefined; 
+        if (response.status === 503) {
+            console.warn(`Database not configured. Cannot fetch employee ${employeeId}.`);
+            toast({ title: "Employee Data Unavailable", description: "Database not configured. Cannot load specific employee.", variant: "default"});
+            return undefined;
+        }
         const errorData = await response.json().catch(() => ({message: `Failed to fetch employee ${employeeId} (Status: ${response.status})`}));
         throw new Error(errorData.message || `Failed to fetch employee ${employeeId} (Status: ${response.status})`);
       }
@@ -385,7 +434,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({message: `Failed to update invoice status (Status: ${response.status})`}));
         toast({ title: "Error Updating Invoice Status", description: errorData.message || "Could not update invoice status.", variant: "destructive"});
-        return; // Return early if API call failed
+        return; 
       }
       const updatedInvoice: Invoice = await response.json();
       setInvoices(prevInvoices => 
@@ -399,7 +448,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         console.error("Error updating invoice status:", error);
         toast({ title: "Error Updating Invoice Status", description: error.message || "Could not update invoice status.", variant: "destructive"});
     } finally {
-      setLoadingInvoices(false); // Ensure loading is set to false in all cases
+      setLoadingInvoices(false); 
     }
   }, [toast]);
 

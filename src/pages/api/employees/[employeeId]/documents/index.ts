@@ -1,6 +1,5 @@
 
 // src/pages/api/employees/[employeeId]/documents/index.ts
-// API route to add a document to an employee
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { MongoClient, ObjectId, ServerApiVersion } from 'mongodb';
 import type { Employee, EmployeeDocument } from '@/lib/types';
@@ -15,23 +14,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (!uri) {
-    const warningMessage = `MONGODB_URI is not configured. Document operations for employee ${employeeId} will be mocked.`;
-    console.warn("**************************************************************************************");
-    console.warn(`WARNING: ${warningMessage}`);
-    console.warn("**************************************************************************************");
-    // Simplified mock for adding document - in a real scenario, you'd fetch the employee first
-    if (req.method === 'POST') {
-        const { name, description, fileName, fileType, fileSize } = req.body as Omit<EmployeeDocument, 'id' | 'uploadedAt'>;
-        if (!name) return res.status(400).json({ message: "Document name is required for mock." });
-        
-        // This mock doesn't persist, just returns what a successful operation might look like
-        const mockEmployee: Employee = { 
-            id: employeeId, name: "Mock Employee", documents: [{
-            id: uuidv4(), name, description, fileName, fileType, fileSize, uploadedAt: new Date()
-        }]};
-        return res.status(200).json(mockEmployee);
-    }
-    return res.status(405).json({ message: `Method ${req.method} Not Allowed without DB for employee documents` });
+    const criticalMessage = `CRITICAL: MONGODB_URI is not configured. Document operations for employee ${employeeId} are disabled.`;
+    console.error("**************************************************************************************");
+    console.error(criticalMessage);
+    console.error(`Attempted operation: ${req.method} on ${req.url}`);
+    console.error("**************************************************************************************");
+    return res.status(503).json({ 
+        message: "Service Unavailable: Database is not configured. Please set the MONGODB_URI environment variable.",
+        errorContext: `Operation: ${req.method} on ${req.url}` 
+    });
   }
   
   if (!ObjectId.isValid(employeeId)) {
@@ -54,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       const newDocument: EmployeeDocument = {
-        id: uuidv4(), // Client-side compatible unique ID for the document within the array
+        id: uuidv4(),
         name,
         description: description || undefined,
         uploadedAt: new Date(),
@@ -101,4 +92,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 }
-

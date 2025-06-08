@@ -74,6 +74,21 @@ const defaultFormValues: InvoiceFormData = {
     serviceProviderName: '',
 };
 
+const mockServices = [
+  { id: 'serv-1', description: 'Web Design Consultation', unitPrice: 150.00 },
+  { id: 'serv-2', description: 'Software Development (hourly)', unitPrice: 120.00 },
+  { id: 'serv-3', description: 'Graphic Design Package', unitPrice: 750.00 },
+  { id: 'serv-4', description: 'Monthly Retainer - Basic', unitPrice: 500.00 },
+  { id: 'serv-5', description: 'Product Photography Session', unitPrice: 600.00 },
+  { id: 'serv-6', description: 'Software License - Annual', unitPrice: 299.00 },
+];
+
+const mockCustomers = [
+  { id: 'cust-1', name: 'Acme Innovations Ltd.', address: '123 Innovation Drive, Tech City, TX 75001' },
+  { id: 'cust-2', name: 'Beta Solutions Inc.', address: '456 Beta Boulevard, Silicon Valley, CA 94043' },
+  { id: 'cust-3', name: 'Gamma Services Co.', address: '789 Gamma Lane, Metro City, NY 10001' },
+];
+
 export default function InvoicingPage() {
   const { employees, invoices, addInvoice, updateInvoice, getInvoiceById, getNextInvoiceNumber } = useAppData();
   const { toast } = useToast();
@@ -117,7 +132,6 @@ export default function InvoicingPage() {
   }, [watchedEmployeeId, watchedServiceProviderName, employees]);
   
   useEffect(() => {
-    // Show input if header has value (e.g. when editing or if previously set)
     if (watchedCustomColumnHeader) {
       setIsCustomHeaderInputVisible(true);
     }
@@ -137,7 +151,6 @@ export default function InvoicingPage() {
         serviceProviderName: invoiceToEdit.serviceProviderName || '',
         customColumnHeader: invoiceToEdit.customColumnHeader || '',
       });
-      // Set combobox text
       if (invoiceToEdit.employeeId) {
           const emp = employees.find(e => e.id === invoiceToEdit.employeeId);
           setServiceProviderSearchText(emp?.name || invoiceToEdit.serviceProviderName || "");
@@ -365,6 +378,38 @@ export default function InvoicingPage() {
 
                 <Separator className="my-6" />
                 <CardTitle className="text-xl font-headline">Customer & Service Details</CardTitle>
+                
+                <FormItem>
+                  <FormLabel>Select Existing Customer (Optional)</FormLabel>
+                  <Select
+                    onValueChange={(customerId) => {
+                      const selectedCustomer = mockCustomers.find(c => c.id === customerId);
+                      if (selectedCustomer) {
+                        form.setValue('customerName', selectedCustomer.name, { shouldValidate: true });
+                        form.setValue('customerAddress', selectedCustomer.address);
+                      } else if (customerId === "none") {
+                        // Optionally clear fields if a "none" option is chosen
+                        // For now, we won't clear if they select "none" after filling manually
+                        // User can clear them manually if needed.
+                      }
+                    }}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Or select a customer to auto-fill" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">-- Select Existing --</SelectItem>
+                      {mockCustomers.map(customer => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+
                 <FormField control={form.control} name="customerName" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Customer/Company Name</FormLabel>
@@ -472,6 +517,9 @@ export default function InvoicingPage() {
                               className="text-xs h-auto py-1 px-1.5"
                               onClick={() => {
                                 form.setValue("customColumnHeader", "");
+                                fields.forEach((_item, index) => {
+                                  form.setValue(`lineItems.${index}.customColumnValue`, "");
+                                });
                                 setIsCustomHeaderInputVisible(false);
                               }}
                             >
@@ -489,7 +537,33 @@ export default function InvoicingPage() {
                 )}
 
                 {fields.map((item, index) => (
-                  <div key={item.id} className={`grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr${watchedCustomColumnHeader ? '_1fr' : ''}_auto] gap-2 items-end p-3 border rounded-md`}>
+                  <div key={item.id} className={`grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr${watchedCustomColumnHeader ? '_1fr_1fr' : '_1fr'}_auto] gap-2 items-end p-3 border rounded-md`}>
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Service/Product</FormLabel>
+                      <Select
+                        onValueChange={(serviceId) => {
+                          const selectedService = mockServices.find(s => s.id === serviceId);
+                          if (selectedService) {
+                            form.setValue(`lineItems.${index}.description`, selectedService.description, {shouldValidate: true});
+                            form.setValue(`lineItems.${index}.unitPrice`, selectedService.unitPrice, {shouldValidate: true});
+                          }
+                        }}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Service/Product" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">-- Custom Item --</SelectItem>
+                          {mockServices.map(service => (
+                            <SelectItem key={service.id} value={service.id}>
+                              {service.description}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
                     <FormField control={form.control} name={`lineItems.${index}.description`} render={({ field }) => (
                       <FormItem><FormLabel>Description</FormLabel><FormControl><Input {...field} /></FormControl><FormMessage /></FormItem>
                     )} />
@@ -536,7 +610,7 @@ export default function InvoicingPage() {
                             className="bg-muted"
                         />
                     </FormItem>
-                    <Button type="button" variant="outline" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
+                    <Button type="button" variant="outline" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1} aria-label="Remove line item">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
@@ -683,3 +757,4 @@ export default function InvoicingPage() {
     </div>
   );
 }
+
