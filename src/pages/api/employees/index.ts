@@ -72,8 +72,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   let client: MongoClient | null = null;
   try {
+    console.log("Attempting to connect to MongoDB for /api/employees...");
     client = new MongoClient(uri, { serverApi: { version: ServerApiVersion.v1, strict: true, deprecationErrors: true }});
     await client.connect();
+    console.log("Successfully connected to MongoDB for /api/employees.");
     const db = client.db("flowHQApp"); 
     const employeesCollection = db.collection<Omit<Employee, 'id'> & { _id?: ObjectId }>('employees');
 
@@ -116,11 +118,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(405).end(`Method ${req.method} Not Allowed`);
     }
   } catch (error) {
-    console.error('API Error (employees/index.ts):', error);
+    console.error('API Error (employees/index.ts) during database operation or connection:', error);
     res.status(500).json({ message: 'Internal Server Error communicating with database.' });
   } finally {
     if (client) {
       await client.close();
+      console.log("MongoDB connection closed for /api/employees.");
     }
   }
 }
