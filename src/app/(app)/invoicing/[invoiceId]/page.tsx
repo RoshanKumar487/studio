@@ -24,7 +24,7 @@ export default function InvoiceDetailPage() {
   const [serviceEmployee, setServiceEmployee] = useState<Employee | null | undefined>(undefined);
   const [isLoadingEmployee, setIsLoadingEmployee] = useState(false);
 
-  const invoiceId = typeof params.invoiceId === 'string' ? params.invoiceId : '';
+  const invoiceId = params && typeof params.invoiceId === 'string' ? params.invoiceId : '';
 
   useEffect(() => {
     if (invoiceId) {

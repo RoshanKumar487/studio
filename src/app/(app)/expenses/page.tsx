@@ -583,7 +583,8 @@ export default function ExpensesPage() {
                           onClick={() => handleViewHistoryAttachment(entry)}
                           aria-label="View attachment metadata"
                         >
-                          <FileText className="h-4 w-4 text-primary" title={entry.documentFileName} />
+                          <FileText className="h-4 w-4 text-primary" />
+                          <span className="sr-only">{entry.documentFileName}</span>
                         </Button>
                       ) : (
                         <span className="text-xs text-muted-foreground italic">-</span>
